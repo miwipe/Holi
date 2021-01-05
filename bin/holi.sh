@@ -130,12 +130,13 @@ rm $bname.merged.Header.sam.gz $bname.merged.alignment.sam.gz $bname.merged.alig
 ls -lh *bam
 
 rm *nt.?*
+rm *protozoa.fa*
 rm *vert_other.?*
 rm *vert_mam.?*
-rm *vert_mam.??*
+rm *plant.?*
 rm *invert.?*
 rm *norPlantCom*
-rm *viral_fungi_archaea*
+rm *archaea_fungi_virus.fa*
 rm *arctic_animal*
 rm $bname.merged.sam.gz
 
