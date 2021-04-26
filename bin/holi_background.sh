@@ -64,7 +64,7 @@ echo Mapping $bname.fq against $DB
 nice -n 5 bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam 
 done
 
-for DB in /willerslev/datasets/mwp/databases/hs37d5/hs37d5
+for DB in /willerslev/edna/database/Homo_sapiens/homo_sapiens.fa
 do
 echo Mapping $bname.fq against $DB
 nice -n 5 bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam 
