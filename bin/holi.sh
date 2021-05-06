@@ -119,7 +119,7 @@ echo Mapping $bname.fq against $DB
 done
 
 ## Merging all alignment files
-samtools merge $bname.merged.sam.gz *.bam -@ 60
+samtools merge $bname.merged.sam.gz *.bam -@ 30
 
 ## Sorting the merged sam.gz file
 echo Printing header
