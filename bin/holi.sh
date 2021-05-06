@@ -115,11 +115,11 @@ done
 for DB in /willerslev/datasets/microbial_dbs/GTDB/higres/20201125/bowtie2/highres-db-micro_20201125
 do
 echo Mapping $bname.fq against $DB
-bowtie2 --threads 80 -k 1000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
+#bowtie2 --threads 80 -k 1000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
 done
 
 ## Merging all alignment files
-samtools merge --verbosity 5  $bname.merged.sam.gz *.bam -@ 60
+samtools merge $bname.merged.sam.gz *.bam -@ 60
 
 ## Sorting the merged sam.gz file
 echo Printing header
