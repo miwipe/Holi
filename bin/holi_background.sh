@@ -24,9 +24,9 @@ fastq-grep -v "ATCTCGTATGCCGTCTTCTGCTTG" adap1_kmer2_$bname > adap2_kmer2_$bname
 echo Step 6. sga preprocessing
 sga preprocess --dust-threshold=4 -m 30 adap2_*.fq -o adap2_kmer2_$bname.pp.fq
 echo Step 7. sga indexing
-nice -n 5 sga index --algorithm=ropebwt --threads=80 adap2_kmer2_$bname.pp.fq
+nice -n 5 sga index --algorithm=ropebwt --threads=60 adap2_kmer2_$bname.pp.fq
 echo Step 8. sga filtering duplicates
-nice -n 5 sga filter --threads=80  --no-kmer-check adap2_kmer2_$bname.pp.fq -o adap2_kmer2_$bname.pp.rmdup.fq
+nice -n 5 sga filter --threads=60  --no-kmer-check adap2_kmer2_$bname.pp.fq -o adap2_kmer2_$bname.pp.rmdup.fq
 echo Step 9. Calculating read length distribution and outputting file
 cat adap2_kmer2_$bname.pp.rmdup.fq | awk '{if(NR%4==2) print length($1)}' | sort -n | uniq -c > adap2_kmer2_$bname.pp.rmdup.fq.read_length.txt &
 
@@ -43,89 +43,89 @@ rm *rmdup.discard.fa
 for DB in /willerslev/datasets/ycw/norway_plant_ctgenoms/complete_genomes/final_db/norPlantCom.?
 do
 echo Mapping adap2_kmer2_$bname.pp.rmdup.fq against $DB
-nice -n 5 bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
+bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
 done
 
 for DB in /willerslev/datasets/ncbi_nt_Nov2020/nt.fa.?
 do
 echo Mapping adap2_kmer2_$bname.pp.rmdup.fq against $DB
-nice -n 5 bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
+bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
 done
 
 for DB in /willerslev/datasets/refseq_23dec2020/vertebrate_other/vertebrate_other.?
 do
 echo Mapping $bname.fq against $DB
-nice -n 5 bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
+bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
 done
 
 for DB in /willerslev/datasets/refseq_23dec2020/vertebrate_mammalian/vertebrate_mammalian.?
 do
 echo Mapping $bname.fq against $DB
-nice -n 5 bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam 
+bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam 
 done
 
 for DB in /willerslev/edna/database/Homo_sapiens/homo_sapiens.fa
 do
 echo Mapping $bname.fq against $DB
-nice -n 5 bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam 
+bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam 
 done
 
 for DB in /willerslev/datasets/refseq_23dec2020/invertebrate/invertebrate.?
 do
 echo Mapping $bname.fq against $DB
-nice -n 5 bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
+bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
 done
 
 for DB in /willerslev/datasets/refseq_23dec2020/archaea_fungi_virus/archaea_fungi_virus.fa
 do
 echo Mapping $bname.fq against $DB
-nice -n 5 bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
+bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
 done
 
 for DB in /willerslev/datasets/ycw/polar_animals/arctic_animals.fa
 do
 echo Mapping $bname.fq against $DB
-nice -n 5 bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
+bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
 done
 
 for DB in /willerslev/datasets/ycw/polar_animals/arctic_animals_other.fa
 do
 echo Mapping $bname.fq against $DB
-nice -n 5 bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
+bowtie2 --threads 60 -k 5000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
 done
 
 for DB in /willerslev/datasets/ycw/polar_animals/arctic_animal_b3.fa
 do
 echo Mapping $bname.fq against $DB
-nice -n 5 bowtie2 --threads 60 -k 1000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
+bowtie2 --threads 60 -k 1000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
 done
 
 for DB in /willerslev/datasets/refseq_23dec2020/plant/plant.?
 do
 echo Mapping $bname.fq against $DB
-nice -n 5 bowtie2 --threads 60 -k 1000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
+bowtie2 --threads 60 -k 1000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
 done
 
 for DB in /willerslev/datasets/refseq_23dec2020/protozoa/protozoa.fa
 do
 echo Mapping $bname.fq against $DB
-nice -n 5 bowtie2 --threads 60 -k 1000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
+bowtie2 --threads 60 -k 1000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
 done 
 
 for DB in /willerslev/datasets/microbial_dbs/GTDB/higres/20201125/bowtie2/highres-db-micro_20201125
 do
 echo Mapping $bname.fq against $DB
-nice -n 5 bowtie2 --threads 60 -k 1000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
+bowtie2 --threads 60 -k 1000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
 done
 
 ## Merging all alignment files
-samtools merge --verbosity 5  $bname.merged.sam.gz *.bam -@ 60
+samtools merge $bname.merged.sam.gz *.bam -@ 20
 
 ## Sorting the merged sam.gz file
 echo Printing header
-nice -n 5 time samtools view --threads 60  -H $bname.merged.sam.gz | gzip > $bname.merged.Header.sam.gz
+samtools view --threads 40  -H $bname.merged.sam.gz | gzip > $bname.merged.Header.sam.gz
 echo Printing alignment
-nice -n 5 time samtools view --threads 60 $bname.merged.sam.gz | gzip > $bname.merged.alignment.sam.gz
+samtools view --threads 40 $bname.merged.sam.gz | gzip > $bname.merged.alignment.sam.gz
 echo Sorting alignment file
 time /willerslev/software/gz-sort/gz-sort -S 30G -P 10 $bname.merged.alignment.sam.gz $bname.merged.alignment.sort.sam.gz
 echo Merging Header and sorted alignment
