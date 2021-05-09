@@ -1,5 +1,9 @@
 for infile in $(pwd)/*.fq
 do
+
+source /home/npl206/miniconda3/etc/profile.d/conda.sh
+conda activate metagen_session
+
 bname=$(basename $infile)
 echo $bname
 bname2=$(echo $bname | sed 's/.fq*/_holi/')
