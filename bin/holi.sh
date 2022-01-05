@@ -116,10 +116,10 @@ echo Mapping $bname.fq against $DB
 bowtie2 --threads 80 -k 1000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
 done 
 
-for DB in /willerslev/datasets/microbial_dbs/GTDB/higres/20201125/bowtie2/highres-db-micro_20201125
+for DB in /willerslev/datasets/microbial_dbs/GTDB/r89/bowtie2/gtdb_r89
 do
 echo Mapping $bname.fq against $DB
-#bowtie2 --threads 80 -k 1000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
+bowtie2 --threads 80 -k 1000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
 done
 
 ## Merging all alignment files
@@ -141,22 +141,15 @@ ls -lh *bam
 rm *nt.fa*
 rm *vert_other.?*
 rm *vert_mam.?*
-rm *highres-db-micro_20201125*
+rm *gtdb_r89*
 rm *invert.?*
 rm *norPlantCom*
 rm *viral_fungi_archaea*
 rm *arctic_animal*
 rm *plant*
 rm $bname.merged.sam.gz
+rm *protozoa*
 
-## Running ngsLCA and metaDamage
-for file in *.merged.sort.sam.gz
-do
-nam=/willerslev/edna/ncbi_taxonomy3dec2020/names.dmp
-nod=/willerslev/edna/ncbi_taxonomy3dec2020/nodes.dmp
-ac2tax=/willerslev/edna/ncbi_taxonomy3dec2020/combined_taxid_accssionNO_20201120.gz
-/willerslev/edna/metadamage/metadamage lca -simscorelow 0.95 -simscorehigh 1.0 -names $nam -nodes $nod -acc2tax $ac2tax -bam $file -outnames $file.allrank -howmany 15
-done 
 
 cd $basepath
 done
