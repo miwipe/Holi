@@ -156,3 +156,54 @@ done
 
 done
 
+#Merging 
+
+
+for infile in *.fq.gz 
+do
+echo $infile
+NAME=$(echo $infile | sed 's/.merge.filt2.sga4.fq.gz//')
+
+
+## Merging all alignment files
+samtools merge -n $NAME.merged.sam.gz *.bam -@ 30
+
+
+
+## Sorting the merged sam.gz file
+echo Printing header
+time samtools view --threads 80  -H $NAME.merged.sam.gz | gzip > $NAME.merged.Header.sam.gz
+echo Printing alignment
+time samtools view --threads 80 $NAME.merged.sam.gz | gzip > $NAME.merged.alignment.sam.gz
+echo Sorting alignment file
+time /willerslev/software/gz-sort/gz-sort -S 30G -P 10 $NAME.merged.alignment.sam.gz $NAME.merged.alignment.sort.sam.gz
+echo Merging Header and sorted alignment
+time zcat $NAME.merged.Header.sam.gz $NAME.merged.alignment.sort.sam.gz | samtools view -h -o $NAME.merged.sort.sam.gz
+rm $NAME.merged.Header.sam.gz $NAME.merged.alignment.sam.gz $NAME.merged.alignment.sort.sam.gz
+
+done
+
+ls -lh *bam 
+
+rm *nt.fa*
+rm *vert_other.?*
+rm *vert_mam.?*
+rm *gtdb_r89*
+rm *invert.?*
+rm *norPlantCom*
+rm *viral_fungi_archaea*
+rm *arctic_animal*
+rm *plant*
+rm $bname.merged.sam.gz
+rm *protozoa*
+
+
+cd $basepath
+
+
+
+
+
+
+
+

@@ -123,7 +123,7 @@ bowtie2 --threads 80 -k 1000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal 
 done
 
 ## Merging all alignment files
-samtools merge $bname.merged.sam.gz *.bam -@ 30
+samtools merge -n $bname.merged.sam.gz *.bam -@ 30
 
 ## Sorting the merged sam.gz file
 echo Printing header
@@ -153,3 +153,15 @@ rm *protozoa*
 
 cd $basepath
 done
+
+
+### metaDMG
+
+metaDMG config test.sorted.bam \
+    --names ncbi_tax_dmp/names.dmp \
+    --nodes ncbi_tax_dmp/nodes.dmp \
+    --acc2tax ncbi_tax_dmp/nucl_gb.accession2taxid \
+    --custom-database
+
+
+
