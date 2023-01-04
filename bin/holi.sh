@@ -122,6 +122,7 @@ echo Mapping $bname.fq against $DB
 bowtie2 --threads 80 -k 1000 -x $DB -U adap2_kmer2_$bname.pp.rmdup.fq --no-unal | samtools view -bS - > $bname.$(basename $DB).bam
 done
 
+
 ## Merging all alignment files
 samtools merge -n $bname.merged.sam.gz *.bam -@ 30
 
@@ -153,15 +154,6 @@ rm *protozoa*
 
 cd $basepath
 done
-
-
-### metaDMG
-
-metaDMG config test.sorted.bam \
-    --names ncbi_tax_dmp/names.dmp \
-    --nodes ncbi_tax_dmp/nodes.dmp \
-    --acc2tax ncbi_tax_dmp/nucl_gb.accession2taxid \
-    --custom-database
 
 
 

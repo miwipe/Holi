@@ -158,17 +158,23 @@ done
 
 #Merging 
 
+## Sorting bam files
+
+for infile2 in $NAME*.bam
+do
+cat $infile2 | samtools sort -n > $infile2.s.bam
+done 
+
 
 for infile in *.fq.gz 
 do
 echo $infile
 NAME=$(echo $infile | sed 's/.merge.filt2.sga4.fq.gz//')
+echo $NAME
 
 
 ## Merging all alignment files
-samtools merge -n $NAME.merged.sam.gz *.bam -@ 30
-
-
+samtools merge -n $NAME.merged.sam.gz $NAME.*.s.bam -@ 30
 
 ## Sorting the merged sam.gz file
 echo Printing header
@@ -182,6 +188,51 @@ time zcat $NAME.merged.Header.sam.gz $NAME.merged.alignment.sort.sam.gz | samtoo
 rm $NAME.merged.Header.sam.gz $NAME.merged.alignment.sam.gz $NAME.merged.alignment.sort.sam.gz
 
 done
+
+#****** we are here ***** ran  from merging to here :)
+
+###HERE is some script o run different things depending on the size 
+
+###This section splits 
+
+for infile in *.fq.gz 
+do
+echo $infile
+NAME=$(echo $infile | sed 's/.merge.filt2.sga4.fq.gz//')
+echo $NAME
+## Merging all alignment files
+samtools merge -n $NAME.merged.sam.gz $NAME.*.s.bam -@ 30
+
+#store the size of the merged file in an object
+size=$(wc -c <"$NAME.merged.sam.gz")
+
+#evaluate if the size is bigger or smaller than 2GB
+if [ $size -gt 2147483648 ]
+  then
+  
+  #do this gz sort thing if big 
+  
+  echo Printing header
+time samtools view --threads 80  -H $NAME.merged.sam.gz | gzip > $NAME.merged.Header.sam.gz
+echo Printing alignment
+time samtools view --threads 80 $NAME.merged.sam.gz | gzip > $NAME.merged.alignment.sam.gz
+echo Sorting alignment file
+time /willerslev/software/gz-sort/gz-sort -S 30G -P 10 $NAME.merged.alignment.sam.gz $NAME.merged.alignment.sort.sam.gz
+echo Merging Header and sorted alignment
+time zcat $NAME.merged.Header.sam.gz $NAME.merged.alignment.sort.sam.gz | samtools view -h -o $NAME.merged.sort.sam.gz
+rm $NAME.merged.Header.sam.gz $NAME.merged.alignment.sam.gz $NAME.merged.alignment.sort.sam.gz
+
+else
+    # Print 'smaller' if the size is smaller than 2GB
+    samtools sort -n $NAME.merged.sam.gz -o $NAME.merged.sort.sam.gz
+  fi
+done
+
+
+
+
+
+
 
 ls -lh *bam 
 
@@ -198,12 +249,13 @@ rm $bname.merged.sam.gz
 rm *protozoa*
 
 
-cd $basepath
 
-
-
-
-
+metaDMG config LV7001884479-LV7001305748-LH-MD9-0900_S7_L004.merged.sort.sam.gz \
+    --names ncbi_tax_dmp/names.dmp \
+    --nodes ncbi_tax_dmp/nodes.dmp \
+    --acc2tax ncbi_tax_dmp/nucl_gb.accession2taxid \
+    --metaDMG-cpp ~/metaDMG/metaDMG-cpp/metaDMG-cpp \
+    --custom-database
 
 
 
