@@ -193,7 +193,8 @@ done
 
 ###HERE is some script o run different things depending on the size 
 
-###This section splits 
+###This section is in development 
+
 
 for infile in *.fq.gz 
 do
@@ -224,7 +225,7 @@ rm $NAME.merged.Header.sam.gz $NAME.merged.alignment.sam.gz $NAME.merged.alignme
 
 else
     # Print 'smaller' if the size is smaller than 2GB
-    samtools sort -n $NAME.merged.sam.gz -o $NAME.merged.sort.sam.gz
+    samtools sort -n -@ 10 -m 10G $NAME.merged.sam.gz -o $NAME.merged.sort.sam.gz
   fi
 done
 
