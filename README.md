@@ -5,5 +5,5 @@ Holi is a versatile bioinformatic pipeline designed for the analysis of ancient 
 With a focus on the challenges unique to ancient metagenomics, such as low-quality and damaged DNA, Holi attempts accurate identification of taxa using a competitive setup, authentication of ancient DNA patterns, genome/reference-wide statistics and metrics for eventual reporting.
 
 
-Below you can find both a bash script guide for running the pipeline and a slurm sbash version of the same. For the details and explanations please visit the wiki.
+Below you can find both a bash script guide for running the pipeline and a slurm sbash version of the same. For the details and explanations please visit the [wiki](https://github.com/miwipe/Holi/wiki/Wiki-Introduction-for-Holi).
 ### Bash scripts
