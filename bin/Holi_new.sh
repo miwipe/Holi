@@ -5,6 +5,7 @@
 # Requirements: GNU Parallel, fastp, vsearch, sga, bowtie2, samtools, filterBAM, metaDMG-cpp, conda
 
 ### Add the activation of a conda file - does one exist? 
+### The database paths need to be adjusted!
 
 # Log file name (can be a command line input, or seperated by tool)
 LOG_FILE="Holi.log"
