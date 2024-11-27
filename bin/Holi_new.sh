@@ -4,8 +4,7 @@
 # Description: Comprehensive automated pipeline for preprocessing, mapping, filtering, and taxonomic classification of FASTQ files.
 # Requirements: GNU Parallel, fastp, vsearch, sga, bowtie2, samtools, filterBAM, metaDMG-cpp, conda
 
-### Add the activation of a conda file - does one exist? 
-### The database paths need to be adjusted!
+### WHERE IS METADMG AND BAM FILTER? 
 
 # Log file name (can be a command line input, or seperated by tool)
 LOG_FILE="Holi.log"
@@ -294,6 +293,8 @@ cat sample.list | parallel -j $THREADSP 'bamfilter --input {}.ArcticAnimal_sup.b
     --output {}.ArcticAnimal_sup.reassign.bam' &> {}.ArcticAnimal_sup.reassign.log.txt
 check_success "Filtering for ArcticAnimal_sup database"
 
+log_step "Mapping to all databases and initial filtering of bam files done. Continuing ..." 
+################################################################################################################################################
 
 log_step "Merging BAM files per sample..."
 cat sample.list | parallel -j $THREADSP 'samtools merge {}.*.reassign.bam {}.comp.reassign.bam -@ 24'
