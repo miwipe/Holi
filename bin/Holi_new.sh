@@ -81,7 +81,7 @@ log_step "Intermediate files removed."
 log_step "Mapping reads to vertebrate mammal databases with bowtie2..."
 for db in {1..10}; do
     cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-      -x /projects/wintherpedersen/data/refseq_30Aug2022/vertebrate_mammal/vert_mam.'$db' \
+      -x /datasets/globe_databases/holi_db/vertebrate_mammalian/20231205/vert_mam.'$db' \
       -U {}.ppm.vs.d4.fq --no-unal --mm -t | samtools view -bS - > {}.vert_mam.'$db'.bam' \
       &> vert_mam.$db.log.txt
     check_success "Mapping to database $db"
@@ -98,9 +98,9 @@ done
 
 # Mapping with bowtie2
 log_step "Mapping reads to invertebrate databases with bowtie2..."
-for db in {1..3}; do
+for db in {1..6}; do
     cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-      -x /projects/wintherpedersen/data/refseq_30Aug2022/invertebrate/invert.'$db' \
+      -x /datasets/globe_databases/holi_db/invertebrate/20231205/invert.'$db' \
       -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.invert.'$db'.bam' \
       &> invert.$db.log.txt
     check_success "Mapping to invertebrate database $db"
@@ -108,7 +108,7 @@ done
 
 # Filtering with filterBAM
 log_step "Filtering BAM files with filterBAM (step 1) for invertebrates..."
-for db in {1..3}; do
+for db in {1..6}; do
     cat sample.list | parallel -j $THREADSP 'filterBAM reassign \
       --bam {}.invert.'$db'.bam -t 4 -i 1 -A 90 -m 20G -n 3 \
       -o {}.invert.'$db'.reassign.bam &> {}.invert.'$db'.reassign.log.txt'
@@ -116,9 +116,9 @@ for db in {1..3}; do
 done
 
 log_step "Mapping reads to vertebrate other databases with bowtie2..."
-for db in {1..8}; do
+for db in {1..12}; do
     cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-      -x /projects/wintherpedersen/data/refseq_30Aug2022/vertebrate_other/vert_other.'$db' \
+      -x /datasets/globe_databases/holi_db/vert_other/20231205/vert_other.'$db' \
       -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.vert_other.'$db'.bam' \
       &> vert_other.$db.log.txt
     check_success "Mapping to vertebrate other database $db"
@@ -126,7 +126,7 @@ done
 
 # Filtering with filterBAM for vert_other databases (1 to 8)
 log_step "Filtering BAM files with filterBAM (step 1) for vert_other databases..."
-for db in {1..8}; do
+for db in {1..12}; do
     cat sample.list | parallel -j $THREADSP 'filterBAM reassign \
       --bam {}.vert_other.'$db'.bam -t 4 -i 1 -A 90 -m 20G -n 3 \
       -o {}.vert_other.'$db'.reassign.bam &> {}.vert_other.'$db'.reassign.log.txt'
@@ -137,7 +137,7 @@ done
 log_step "Mapping reads to plant databases with bowtie2..."
 for db in {1..5}; do
     cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-      -x /projects/wintherpedersen/data/refseq_30Aug2022/plant/plant.'$db' \
+      -x /datasets/globe_databases/holi_db/plant/20231205/plant.'$db' \
       -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.plant.'$db'.bam' \
       &> plant.$db.log.txt
     check_success "Mapping to plant database $db"
@@ -153,33 +153,47 @@ for db in {1..5}; do
 done
 
 # Mapping with bowtie2 for archaea_fungi_virus, plastid, mitochondrion, and protozoa databases
-log_step "Mapping reads to archaea_fungi_virus, plastid, mitochondrion, and protozoa databases with bowtie2..."
-for db in archaea_fungi_virus plastid mitochondrion protozoa; do
-    # Mapping for archaea_fungi_virus
-    if [ "$db" == "archaea_fungi_virus" ]; then
+log_step "Mapping reads to archaea, fungi, virus, plastid, mitochondrion, and protozoa databases with bowtie2..."
+for db in archaea fungi viral plastid mitochondrion protozoa; do
+    # Mapping for archaea
+    if [ "$db" == "archaea" ]; then
         cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-          -x /projects/wintherpedersen/data/refseq_30Aug2022/archaea_fungi_virus/archaea_fungi_virus.fa \
-          -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.archaea_fungi_virus.1.bam' \
-          &> archaea_fungi_virus.1.log.txt
+          -x  /datasets/globe_databases/holi_db/archaea/20231205/archaea.fa \
+          -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.archaea.1.bam' \
+          &> archaea.1.log.txt
+    fi
+    # Mapping for fungi 
+    if [ "$db" == "fungi" ]; then
+        cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
+          -x  /datasets/globe_databases/holi_db/fungi/20231205/fungi.fa \
+          -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.fungi.1.bam' \
+          &> fungi.1.log.txt
+    fi
+    # Mapping for viral
+    if [ "$db" == "viral" ]; then
+        cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
+          -x  /datasets/globe_databases/holi_db/viral/20231205/viral.fa \
+          -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.viral.1.bam' \
+          &> viral.1.log.txt
     fi
     # Mapping for plastid
     if [ "$db" == "plastid" ]; then
         cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-          -x /projects/wintherpedersen/data/refseq_30Aug2022/plastid/plastid.fa \
+          -x /datasets/globe_databases/holi_db/plastid/20231205/plastid.fa \
           -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.plastid.1.bam' \
           &> plastid.1.log.txt
     fi
     # Mapping for mitochondrion
     if [ "$db" == "mitochondrion" ]; then
         cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-          -x /projects/wintherpedersen/data/refseq_30Aug2022/mitochondrion/mitochondrion.fa \
+          -x /datasets/globe_databases/holi_db/mito/20231205/mitochondrion.fa \
           -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.mitochondrion.1.bam' \
           &> mitochondrion.1.log.txt
     fi
     # Mapping for protozoa
     if [ "$db" == "protozoa" ]; then
         cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-          -x /projects/wintherpedersen/data/refseq_30Aug2022/protozoa/protozoa.fa \
+          -x /datasets/globe_databases/holi_db/protozoa/20231205/protozoa.fa \
           -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.protozoa.1.bam' \
           &> protozoa.1.log.txt
     fi
@@ -188,12 +202,24 @@ done
 
 # Filtering with filterBAM for the new databases
 log_step "Filtering BAM files with filterBAM (step 1) for archaea_fungi_virus, plastid, mitochondrion, and protozoa databases..."
-for db in archaea_fungi_virus plastid mitochondrion protozoa; do
-    # Filtering for archaea_fungi_virus
-    if [ "$db" == "archaea_fungi_virus" ]; then
+for db in archaea fungi viral plastid mitochondrion protozoa; do
+    # Filtering for archaea
+    if [ "$db" == "archaea" ]; then
         cat sample.list | parallel -j $THREADSP 'filterBAM reassign \
-          --bam {}.archaea_fungi_virus.1.bam -t 4 -i 1 -A 90 -m 20G -n 3 \
-          -o {}.archaea_fungi_virus.1.reassign.bam &> {}.archaea_fungi_virus.1.reassign.log.txt'
+          --bam {}.archaea.1.bam -t 4 -i 1 -A 90 -m 20G -n 3 \
+          -o {}.archaea.1.reassign.bam &> {}.archaea.1.reassign.log.txt'
+    fi
+    # Filtering for fungi
+    if [ "$db" == "fungi" ]; then
+        cat sample.list | parallel -j $THREADSP 'filterBAM reassign \
+          --bam {}.fungi.1.bam -t 4 -i 1 -A 90 -m 20G -n 3 \
+          -o {}.fungi.1.reassign.bam &> {}.fungi.1.reassign.log.txt'
+    fi
+    # Filtering for viral
+    if [ "$db" == "viral" ]; then
+        cat sample.list | parallel -j $THREADSP 'filterBAM reassign \
+          --bam {}.viral.1.bam -t 4 -i 1 -A 90 -m 20G -n 3 \
+          -o {}.viral.1.reassign.bam &> {}.viral.1.reassign.log.txt'
     fi
     # Filtering for plastid
     if [ "$db" == "plastid" ]; then
@@ -220,7 +246,7 @@ done
 log_step "Mapping reads to NCBI nt databases with bowtie2..."
 for db in {1..9}; do
     cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-      -x /projects/wintherpedersen/data/ncbi_nt_Sept2022/nt.$db \
+      -x /datasets/globe_databases/holi_db/nt/20231201/nt.$db \
       -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.nt.'$db'.bam' \
       &> nt.$db.log.txt
     check_success "Mapping to nt.$db database"
@@ -238,19 +264,36 @@ done
 log_step "Mapping reads to Norway Plant complete genomes with bowtie2..."
 for db in {1..7}; do
     cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-      -x /projects/wintherpedersen/data/norway_plant_ctgenoms/complete_genomes/final_db/norPlantCom.$db \
-      -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.norPlantCom.'$db'.bam' \
-      &> norPlantCom.$db.log.txt
-    check_success "Mapping to norPlantCom.$db database"
+      -x /datasets/globe_databases/holi_db/phylonorway/20230803/PhyloNorwayContigs_${db}.fasta \
+      -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.PhyloNorwayContigs.'$db'.bam' \
+      &> PhyloNorwayContigs.$db.log.txt
+    check_success "Mapping to PhyloNorwayContigs.$db database"
 done
 
 # Filtering with bamfilter
 log_step "Filtering BAM files Norway Plant complete genomes..."
 for db in {1..7}; do
     cat sample.list | parallel -j $THREADSP 'bamfilter --input {}.norPlantCom.'$db'.bam --minMapQ 30 --maxDepth 1000 \
-      --output {}.norPlantCom.'$db'.reassign.bam' &> {}.norPlantCom.'$db'.reassign.log.txt
-    check_success "Filtering for norPlantCom.$db database"
+      --output {}.PhyloNorwayContigs.'$db'.reassign.bam' &> {}.PhyloNorwayContigs.'$db'.reassign.log.txt
+    check_success "Filtering for PhyloNorwayContigs.$db database"
 done
+
+# Part Nine: Mapping to Arctic Animals
+log_step "Mapping reads to arctic animals supplementary database with bowtie2..."
+
+cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
+    -x /datasets/globe_databases/holi_db/arctic_animals/20230803/ArcticAnimal_sup.fa \
+    -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.ArcticAnimal_sup.bam' \
+    &> ArcticAnimal_sup.log.txt
+check_success "Mapping to ArcticAnimal_sup database"
+
+
+# Filtering with bamfilter
+log_step "Filtering BAM files arctic animals supplementary database ..."
+cat sample.list | parallel -j $THREADSP 'bamfilter --input {}.ArcticAnimal_sup.bam --minMapQ 30 --maxDepth 1000 \
+    --output {}.ArcticAnimal_sup.reassign.bam' &> {}.ArcticAnimal_sup.reassign.log.txt
+check_success "Filtering for ArcticAnimal_sup database"
+
 
 log_step "Merging BAM files per sample..."
 cat sample.list | parallel -j $THREADSP 'samtools merge {}.*.reassign.bam {}.comp.reassign.bam -@ 24'
