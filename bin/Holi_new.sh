@@ -4,7 +4,10 @@
 # Description: Comprehensive automated pipeline for preprocessing, mapping, filtering, and taxonomic classification of FASTQ files.
 # Requirements: GNU Parallel, fastp, vsearch, sga, bowtie2, samtools, filterBAM, metaDMG-cpp, conda
 
-### WHERE IS METADMG AND BAM FILTER? 
+# load needed tools
+conda activate holi
+module load samtools/1.21
+
 
 # Log file name (can be a command line input, or seperated by tool)
 LOG_FILE="Holi.log"
