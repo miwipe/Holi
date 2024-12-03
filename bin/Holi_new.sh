@@ -300,8 +300,10 @@ log_step "Mapping to all databases and initial filtering of bam files done. Cont
 ################################################################################################################################################
 
 log_step "Merging BAM files per sample..."
-cat sample.list | parallel -j $THREADSP 'samtools merge {}.*.reassign.bam {}.comp.reassign.bam -@ 24'
+cat sample.list | parallel -j $THREADSP 'samtools merge -f {}.*.reassign.bam {}.comp.reassign.bam -@ 24'
 check_success "Merging BAM files"
+
+### SAMTOOLS SORT 
 
 log_step "Filtering BAM files with filterBAM (step 2)..."
 cat sample.list | parallel -j $THREADSP 'filterBAM reassign \
@@ -318,9 +320,11 @@ cat sample.list | parallel -j $THREADSP 'filterBAM filter \
   --bam-filtered {}.comp.reassign2.filtered.bam'
 check_success "Final filtering"
 
+## INPUT SAMTOOL SORT
+
 # Taxonomic classification with metaDMG
 log_step "Running taxonomic classification with metaDMG..."
-cat sample.list | parallel -j $THREADSP '/projects/lundbeck/people/npl206/programmes/ngsDMG/metaDMG-cpp/metaDMG-cpp lca \
+cat sample.list | parallel -j $THREADSP 'metaDMG-cpp lca \
   --names /projects/wintherpedersen/data/ncbi_taxonomy_01Oct2022/names.dmp \
   --nodes /projects/wintherpedersen/data/ncbi_taxonomy_01Oct2022/nodes.dmp \
   --acc2tax /projects/wintherpedersen/data/ncbi_taxonomy_01Oct2022/combined_accession2taxid_20221112.gz \
@@ -330,7 +334,7 @@ cat sample.list | parallel -j $THREADSP '/projects/lundbeck/people/npl206/progra
 check_success "Taxonomic classification"
 
 log_step "Extracting DNA damage patterns with metaDMG..."
-cat sample.list | parallel -j $THREADSP '/projects/lundbeck/people/npl206/programmes/ngsDMG/metaDMG-cpp/metaDMG-cpp dfit \
+cat sample.list | parallel -j $THREADSP 'metaDMG-cpp dfit \
   {}.comp.reassign2.filtered.bdamage.gz --threads 6 \
   --names /projects/wintherpedersen/data/ncbi_taxonomy_01Oct2022/names.dmp \
   --nodes /projects/wintherpedersen/data/ncbi_taxonomy_01Oct2022/nodes.dmp --showfits 2 --nopt 10 \
