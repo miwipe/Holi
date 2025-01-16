@@ -2,7 +2,7 @@
 
 # Script: Holi.sh
 # Description: Comprehensive automated pipeline for preprocessing, mapping, filtering, and taxonomic classification of FASTQ files.
-# Requirements: GNU Parallel, fastp, vsearch, sga, bowtie2, samtools, filterBAM, metaDMG-cpp, conda
+# Requirements: GNU Parallel, fastp, vsearch, sga, bowtie2, samtools, filterBAM, conda
 
 # load needed tools
 conda activate holi
@@ -89,15 +89,6 @@ for db in {1..10}; do
     check_success "Mapping to database $db"
 done
 
-# Filtering with filterBAM
-log_step "Filtering BAM files with filterBAM (step 1)..."
-for db in {1..10}; do
-    cat sample.list | parallel -j $THREADSP 'filterBAM reassign \
-      --bam {}.vert_mam.'$db'.bam -t 4 -i 1 -A 90 -m 20G -n 3 \
-      -o {}.vert_mam.'$db'.reassign.bam &> {}.vert_mam.'$db'.reassign.log.txt'
-    check_success "filterBAM reassign for database $db"
-done
-
 # Mapping with bowtie2
 log_step "Mapping reads to invertebrate databases with bowtie2..."
 for db in {1..6}; do
@@ -106,15 +97,6 @@ for db in {1..6}; do
       -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.invert.'$db'.bam' \
       &> invert.$db.log.txt
     check_success "Mapping to invertebrate database $db"
-done
-
-# Filtering with filterBAM
-log_step "Filtering BAM files with filterBAM (step 1) for invertebrates..."
-for db in {1..6}; do
-    cat sample.list | parallel -j $THREADSP 'filterBAM reassign \
-      --bam {}.invert.'$db'.bam -t 4 -i 1 -A 90 -m 20G -n 3 \
-      -o {}.invert.'$db'.reassign.bam &> {}.invert.'$db'.reassign.log.txt'
-    check_success "filterBAM reassign for invertebrate database $db"
 done
 
 log_step "Mapping reads to vertebrate other databases with bowtie2..."
@@ -126,15 +108,6 @@ for db in {1..12}; do
     check_success "Mapping to vertebrate other database $db"
 done
 
-# Filtering with filterBAM for vert_other databases (1 to 8)
-log_step "Filtering BAM files with filterBAM (step 1) for vert_other databases..."
-for db in {1..12}; do
-    cat sample.list | parallel -j $THREADSP 'filterBAM reassign \
-      --bam {}.vert_other.'$db'.bam -t 4 -i 1 -A 90 -m 20G -n 3 \
-      -o {}.vert_other.'$db'.reassign.bam &> {}.vert_other.'$db'.reassign.log.txt'
-    check_success "filterBAM reassign for vertebrate other database $db"
-done
-
 # Mapping with bowtie2 for plant databases (1 to 5)
 log_step "Mapping reads to plant databases with bowtie2..."
 for db in {1..5}; do
@@ -143,15 +116,6 @@ for db in {1..5}; do
       -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.plant.'$db'.bam' \
       &> plant.$db.log.txt
     check_success "Mapping to plant database $db"
-done
-
-# Filtering with filterBAM for plant databases (1 to 5)
-log_step "Filtering BAM files with filterBAM (step 1) for plant databases..."
-for db in {1..5}; do
-    cat sample.list | parallel -j $THREADSP 'filterBAM reassign \
-      --bam {}.plant.'$db'.bam -t 4 -i 1 -A 90 -m 20G -n 3 \
-      -o {}.plant.'$db'.reassign.bam &> {}.plant.'$db'.reassign.log.txt'
-    check_success "filterBAM reassign for plant database $db"
 done
 
 # Mapping with bowtie2 for archaea_fungi_virus, plastid, mitochondrion, and protozoa databases
@@ -202,47 +166,6 @@ for db in archaea fungi viral plastid mitochondrion protozoa; do
     check_success "Mapping to $db database"
 done
 
-# Filtering with filterBAM for the new databases
-log_step "Filtering BAM files with filterBAM (step 1) for archaea_fungi_virus, plastid, mitochondrion, and protozoa databases..."
-for db in archaea fungi viral plastid mitochondrion protozoa; do
-    # Filtering for archaea
-    if [ "$db" == "archaea" ]; then
-        cat sample.list | parallel -j $THREADSP 'filterBAM reassign \
-          --bam {}.archaea.1.bam -t 4 -i 1 -A 90 -m 20G -n 3 \
-          -o {}.archaea.1.reassign.bam &> {}.archaea.1.reassign.log.txt'
-    fi
-    # Filtering for fungi
-    if [ "$db" == "fungi" ]; then
-        cat sample.list | parallel -j $THREADSP 'filterBAM reassign \
-          --bam {}.fungi.1.bam -t 4 -i 1 -A 90 -m 20G -n 3 \
-          -o {}.fungi.1.reassign.bam &> {}.fungi.1.reassign.log.txt'
-    fi
-    # Filtering for viral
-    if [ "$db" == "viral" ]; then
-        cat sample.list | parallel -j $THREADSP 'filterBAM reassign \
-          --bam {}.viral.1.bam -t 4 -i 1 -A 90 -m 20G -n 3 \
-          -o {}.viral.1.reassign.bam &> {}.viral.1.reassign.log.txt'
-    fi
-    # Filtering for plastid
-    if [ "$db" == "plastid" ]; then
-        cat sample.list | parallel -j $THREADSP 'filterBAM reassign \
-          --bam {}.plastid.1.bam -t 4 -i 1 -A 90 -m 20G -n 3 \
-          -o {}.plastid.1.reassign.bam &> {}.plastid.1.reassign.log.txt'
-    fi
-    # Filtering for mitochondrion
-    if [ "$db" == "mitochondrion" ]; then
-        cat sample.list | parallel -j $THREADSP 'filterBAM reassign \
-          --bam {}.mitochondrion.1.bam -t 4 -i 1 -A 90 -m 20G -n 3 \
-          -o {}.mitochondrion.1.reassign.bam &> {}.mitochondrion.1.reassign.log.txt'
-    fi
-    # Filtering for protozoa
-    if [ "$db" == "protozoa" ]; then
-        cat sample.list | parallel -j $THREADSP 'filterBAM reassign \
-          --bam {}.protozoa.1.bam -t 4 -i 1 -A 90 -m 20G -n 3 \
-          -o {}.protozoa.1.reassign.bam &> {}.protozoa.1.reassign.log.txt'
-    fi
-    check_success "filterBAM reassign for $db database"
-done
 
 # Part Seven: Mapping to NCBI nt databases (nt.1 to nt.9)
 log_step "Mapping reads to NCBI nt databases with bowtie2..."
@@ -252,14 +175,6 @@ for db in {1..9}; do
       -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.nt.'$db'.bam' \
       &> nt.$db.log.txt
     check_success "Mapping to nt.$db database"
-done
-
-# Filtering with bamfilter
-log_step "Filtering BAM file for database $db..."
-for db in {1..9}; do
-    cat sample.list | parallel -j $THREADSP 'bamfilter --input {}.nt.'$db'.bam --minMapQ 30 --maxDepth 1000 \
-      --output {}.nt.'$db'reassign.bam' &> {}.nt.'$db'.reassign.log.txt
-    check_success "Filtering for nt.$db database"
 done
 
 # Part Eight: Mapping to Norway Plant Complete Genomes
@@ -272,14 +187,6 @@ for db in {1..7}; do
     check_success "Mapping to PhyloNorwayContigs.$db database"
 done
 
-# Filtering with bamfilter
-log_step "Filtering BAM files Norway Plant complete genomes..."
-for db in {1..7}; do
-    cat sample.list | parallel -j $THREADSP 'bamfilter --input {}.norPlantCom.'$db'.bam --minMapQ 30 --maxDepth 1000 \
-      --output {}.PhyloNorwayContigs.'$db'.reassign.bam' &> {}.PhyloNorwayContigs.'$db'.reassign.log.txt
-    check_success "Filtering for PhyloNorwayContigs.$db database"
-done
-
 # Part Nine: Mapping to Arctic Animals
 log_step "Mapping reads to arctic animals supplementary database with bowtie2..."
 
@@ -290,55 +197,50 @@ cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
 check_success "Mapping to ArcticAnimal_sup database"
 
 
-# Filtering with bamfilter
-log_step "Filtering BAM files arctic animals supplementary database ..."
-cat sample.list | parallel -j $THREADSP 'bamfilter --input {}.ArcticAnimal_sup.bam --minMapQ 30 --maxDepth 1000 \
-    --output {}.ArcticAnimal_sup.reassign.bam' &> {}.ArcticAnimal_sup.reassign.log.txt
-check_success "Filtering for ArcticAnimal_sup database"
-
 log_step "Mapping to all databases and initial filtering of bam files done. Continuing ..." 
 ################################################################################################################################################
 
 log_step "Merging BAM files per sample..."
-cat sample.list | parallel -j $THREADSP 'samtools merge -f {}.*.reassign.bam {}.comp.reassign.bam -@ 24'
+cat sample.list | parallel -j $THREADSP 'samtools merge -f {}.*.bam {}.comp.bam -@ 24'
 check_success "Merging BAM files"
 
-### SAMTOOLS SORT 
+log_step "Sorting merged BAM file ..."
+cat sample.list | parallel -j $THREADSP 'samtools sort -n -@ 24 -m 50 -o {}.sort.comp.bam {}.comp.bam'
 
-log_step "Filtering BAM files with filterBAM (step 2)..."
+log_step "Filtering BAM files with filterBAM ..."
 cat sample.list | parallel -j $THREADSP 'filterBAM reassign \
-  --bam {}.comp.reassign.bam -t 4 -i 0 -A 92 -m 20G -n 10 \
-  -o {}.comp.reassign2.bam &> {}.comp.reassign2.log.txt'
-check_success "filterBAM reassign (second pass)"
+  --bam {}.sort.comp.bam -t 4 -i 0 -A 92 -M 50G -m 10G -n 10 \
+  -o {}.sort.comp.reassign.bam &> {}.sort.comp.reassign.log.txt'
+check_success "filterBAM reassign"
 
 log_step "Final filtering with filterBAM..."
 cat sample.list | parallel -j $THREADSP 'filterBAM filter \
-  -e 0.6 -m 8G -t 4 -n 10 -A 92 -a 95 -N \
-  --bam {}.comp.reassign2.bam \
-  --stats {}.comp.reassign2.stats.tsv.gz \
-  --stats-filtered {}.comp.reassign2.stats-filtered.tsv.gz \
-  --bam-filtered {}.comp.reassign2.filtered.bam'
+  -e 0.6 -M 50G -m 8G -t 4 -n 10 -A 92 -a 95 -N \
+  --bam {}.sort.comp.reassign.bam \
+  --stats {}.sort.comp.reassign.stats.tsv.gz \
+  --stats-filtered {}.sort.comp.reassign.stats-filtered.tsv.gz \
+  --bam-filtered {}.sort.comp.reassign.filtered.bam'
 check_success "Final filtering"
 
 ## INPUT SAMTOOL SORT
 
 # Taxonomic classification with metaDMG
 log_step "Running taxonomic classification with metaDMG..."
-cat sample.list | parallel -j $THREADSP 'metaDMG-cpp lca \
+cat sample.list | parallel -j $THREADSP '/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp lca \
   --names /projects/wintherpedersen/data/ncbi_taxonomy_01Oct2022/names.dmp \
   --nodes /projects/wintherpedersen/data/ncbi_taxonomy_01Oct2022/nodes.dmp \
   --acc2tax /projects/wintherpedersen/data/ncbi_taxonomy_01Oct2022/combined_accession2taxid_20221112.gz \
   --sim_score_low 0.95 --sim_score_high 1.0 --how_many 30 --weight_type 1 \
   --fix_ncbi 0 --threads 4 \
-  --bam {}.comp.reassign2.filtered.bam --out_prefix {}.comp.reassign2.filtered'
+  --bam {}.sort.comp.reassign.filtered.bam --out_prefix {}.sort.comp.reassign.filtered'
 check_success "Taxonomic classification"
 
 log_step "Extracting DNA damage patterns with metaDMG..."
-cat sample.list | parallel -j $THREADSP 'metaDMG-cpp dfit \
+cat sample.list | parallel -j $THREADSP '/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp dfit \
   {}.comp.reassign2.filtered.bdamage.gz --threads 6 \
   --names /projects/wintherpedersen/data/ncbi_taxonomy_01Oct2022/names.dmp \
   --nodes /projects/wintherpedersen/data/ncbi_taxonomy_01Oct2022/nodes.dmp --showfits 2 --nopt 10 \
-  --nbootstrap 20 --doboot 1 --seed 1234 --lib ds --out {}.comp.reassign2.filtered'
+  --nbootstrap 20 --doboot 1 --seed 1234 --lib ds --out {}.sort.comp.reassign.filtered'
 check_success "Extracting DNA damage patterns"
 
 log_step "Merging metaDMG outputs..."
