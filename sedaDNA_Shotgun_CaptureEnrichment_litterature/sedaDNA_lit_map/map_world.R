@@ -9,7 +9,11 @@ library(readr)
 library(readxl)
 library(tidyverse)
 library(googlesheets4)
-coordinates <- read_excel("~/Library/CloudStorage/GoogleDrive-mikkel.w.pedersen@gmail.com/My Drive/sedaDNA_Shotgun_CaptureEnrichment_litterature/ancient_eDNA_litterature.gsheet", sheet = "SG_TE")
+library(dplyr)
+library(scales)
+library(viridis) # For a better color palette
+
+
 
 # Authenticate with Google (only required once)
 gs4_auth()
@@ -63,7 +67,7 @@ ggplot() +
     shape = "Molecular Method" # Legend title for shape
   )
 
-ggsave("SG_TE_map_method.pdf", width = 10, height = 7)
+ggsave("../../figures/SG_TE_map_method.png", width = 10, height = 7, dpi = 300)
 
 
 
@@ -132,10 +136,7 @@ ggsave("barplot_no_publications.pdf", width = 6, height = 4)
 
 
 
-library(ggplot2)
-library(dplyr)
-library(scales)
-library(viridis) # For a better color palette
+
 
 coordinates %>%
   filter(
