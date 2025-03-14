@@ -7,3 +7,6 @@ With a focus on the challenges unique to ancient metagenomics, such as low-quali
 
 Below you can find both a bash script guide for running the pipeline and a slurm sbash version of the same. For the details and explanations please visit the [wiki](https://github.com/miwipe/Holi/wiki).
 ### Bash scripts
+
+
+![Worldmap of study sites in which ancient metagenomic data has been published](figures/SG_TE_map_method.png)
