@@ -70,40 +70,9 @@ ggplot() +
 ggsave("../../figures/SG_TE_map_method.png", width = 10, height = 7, dpi = 300)
 
 
-
 coordinates_proj_SG_TE <- coordinates_proj %>%
   mutate(Lab = as.factor(Lab)) +  # Ensure Lab is a factor
   filter(year_published != "NA", TargetGroup != "Microorganisms", TargetTaxa != "Microorganisms",  TargetTaxa != "Prokaryotes")
-
-    
-ggplot() +
-  # Plot World (reprojected)
-  geom_sf(data = world_proj, fill = "lightgrey", color = "black") +
-  # Add points for the coordinates
-  geom_point(data = coordinates_proj_SG_TE, 
-             aes(x = X, y = Y, shape = MolecularMethod), # Map color to TargetTaxa
-             size = 3) + # Adjust alpha for better visibility
-  # Add text labels for sites
-  geom_text_repel(data = coordinates_proj_SG_TE, 
-                  aes(x = X, y = Y, label = SiteName),
-                  color = "black", size = 3, fontface = "bold", box.padding = 0.3) +
-  # Apply Robinson projection
-  coord_sf(crs = st_crs("+proj=robin")) +
-  theme_minimal() +
-  theme(
-    panel.grid.major = element_line(color = "gray", linetype = "dashed"),
-    panel.background = element_rect(fill = "white", color = NA)
-  ) +
-  labs(
-    title = "Ancient Metagenomic Sites by Lab",
-    x = "Longitude",
-    y = "Latitude",
-    color = "Target Taxa", # Legend title for color
-    shape = "Molecular Method" # Legend title for shape
-  )
-
-
-ggsave("SG_TE_map_labs.pdf", width = 10, height = 7)
 
 
 # count publications per year and make barplot
@@ -132,9 +101,7 @@ coordinates %>%
     fill = "Molecular Method" # Legend title
   )
 
-ggsave("barplot_no_publications.pdf", width = 6, height = 4)
-
-
+ggsave("../../figures/barplot_no_publications.png", width = 6, height = 4, dpi = 300)
 
 
 
@@ -167,7 +134,7 @@ coordinates %>%
     fill = "Molecular Method"
   )
 
-ggsave("barplot_cumsum_no_publications_methods.pdf", width = 6, height = 4)
+ggsave("../../figures/barplot_cumsum_no_publications_methods.png", width = 6, height = 4, , dpi = 300)
 
 
 coordinates %>%
