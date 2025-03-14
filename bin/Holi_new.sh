@@ -102,124 +102,124 @@ else
 fi
 
 ################### MAPPING ######################
-# for db in {1..250}; do
-#     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
-#       bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.euk.$db.bam
-#       if [ -s \"\$bam_file\" ]; then
-#         echo \"Skipping {} for part $db, BAM file already exists and is not empty.\"
-#       else
-#         bowtie2 --threads $THREADS -k 1000 -t \
-#           -x $DB_PATH.$db.fas.gz -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
-#           samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/eukaryota.$db.log.txt
-#       fi"
-#     check_success "Mapping to eukaryote database part $db"
-# done
-#
-# log_step "Mapping reads to mitochondrion database with bowtie2..."
-# cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
-#   bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.mito.bam
-#   if [ -s \"\$bam_file\" ]; then
-#     echo \"Skipping {} for mitochondrion, BAM file already exists and is not empty.\"
-#   else
-#     bowtie2 --threads $THREADS -k 1000 -t \
-#       -x $DB_PATH_clean/refseq_mitochondrion.genomic.fas.gz -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
-#       samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/mitochondrion.log.txt
-#   fi"
-# check_success "Mapping to mitochondrion database"
-#
-# log_step "Mapping reads to phylonorwary database (10 parts) with bowtie2..."
-# for db in {1..10}; do
-#     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
-#       bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.phyNor.$db.bam
-#       if [ -s \"\$bam_file\" ]; then
-#         echo \"Skipping {} for phylonorwary part $db, BAM file already exists and is not empty.\"
-#       else
-#         bowtie2 --threads $THREADS -k 1000 -t \
-#           -x $DB_PATH_Norwary.$db-of-10 -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
-#           samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/phyloNorwary.$db.log.txt
-#       fi"
-#     check_success "Mapping to phyloNorwary database part $db"
-# done
-#
-# log_step "Mapping reads to core NT database with bowtie2..."
-# cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
-#   bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.core_nt.bam
-#   if [ -s \"\$bam_file\" ]; then
-#     echo \"Skipping {} for core NT, BAM file already exists and is not empty.\"
-#   else
-#     bowtie2 --threads $THREADS -k 1000 -t \
-#       -x $DB_PATH_clean/core_nt.fas.gz -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
-#       samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/core_nt.log.txt
-#   fi"
-# check_success "Mapping to core NT database"
-#
-# log_step "Mapping reads to plastid database with bowtie2..."
-# cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
-#   bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.pla.bam
-#   if [ -s \"\$bam_file\" ]; then
-#     echo \"Skipping {} for plastid, BAM file already exists and is not empty.\"
-#   else
-#     bowtie2 --threads $THREADS -k 1000 -t \
-#       -x \"$DB_PATH_clean/refseq_plastid.genomic.fas.gz\" -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
-#       samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/plastid.log.txt
-#   fi"
-# check_success "Mapping to plastid database"
-#
-# log_step "Mapping reads to bacterial database (33 parts) with bowtie2..."
-# for db in {1..33}; do
-#     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
-#       bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.bac.$db.bam
-#       if [ -s \"\$bam_file\" ]; then
-#         echo \"Skipping {} for bacterial part $db, BAM file already exists and is not empty.\"
-#       else
-#         bowtie2 --threads $THREADS -k 1000 -t \
-#           -x $DB_PATH_bac.$db.fas.gz -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
-#           samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/bacterial.$db.log.txt
-#       fi"
-#     check_success "Mapping to bacterial database part $db"
-# done
-#
-# log_step "Mapping reads to archaea database with bowtie2..."
-# cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
-#   bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.arc.bam
-#   if [ -s \"\$bam_file\" ]; then
-#     echo \"Skipping {} for archaea, BAM file already exists and is not empty.\"
-#   else
-#     bowtie2 --threads $THREADS -k 1000 -t \
-#       -x \"$DB_PATH_clean/refseq_archaea.genomic.fas.gz\" -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
-#       samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/archaea.log.txt
-#   fi"
-# check_success "Mapping to archaea database"
-#
-# log_step "Mapping reads to viral database with bowtie2..."
-# cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
-#   bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.vir.bam
-#   if [ -s \"\$bam_file\" ]; then
-#     echo \"Skipping {} for viral, BAM file already exists and is not empty.\"
-#   else
-#     bowtie2 --threads $THREADS -k 1000 -t \
-#       -x \"$DB_PATH_clean/refseq_viral.genomic.fas.gz\" -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
-#       samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/viral.log.txt
-#   fi"
-# check_success "Mapping to viral database"
-#
-# log_step "Mapping finished. Continuing with merging..."
+for db in {1..250}; do
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
+      bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.euk.$db.bam
+      if [ -s \"\$bam_file\" ]; then
+        echo \"Skipping {} for part $db, BAM file already exists and is not empty.\"
+      else
+        bowtie2 --threads $THREADS -k 1000 -t \
+          -x $DB_PATH.$db.fas.gz -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
+          samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/eukaryota.$db.log.txt
+      fi"
+    check_success "Mapping to eukaryote database part $db"
+done
 
-# Now compress the BAM files using metaDMG
-# log_step "Compressing BAM files using metaDMG..."
-# cat "$SAMPLE_LIST" | parallel -j "$THREADSP" '
-#   for bam in '"$OUTPUT_PATH"'/{}*.bam; do
-#     /projects/wintherpedersen/apps/metaDMG_14jun24/metaDMG-cpp/misc/compressbam --threads 12 --input "$bam" --output "'"$OUTPUT_PATH"'"/$(basename "$bam" .bam).comp.bam;
-#   done
-# '
-# check_success "Compressing BAM files"
+log_step "Mapping reads to mitochondrion database with bowtie2..."
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
+  bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.mito.bam
+  if [ -s \"\$bam_file\" ]; then
+    echo \"Skipping {} for mitochondrion, BAM file already exists and is not empty.\"
+  else
+    bowtie2 --threads $THREADS -k 1000 -t \
+      -x $DB_PATH_clean/refseq_mitochondrion.genomic.fas.gz -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
+      samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/mitochondrion.log.txt
+  fi"
+check_success "Mapping to mitochondrion database"
 
-# log_step "Sorting each BAM file before merging..."
-# cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "for bam in $OUTPUT_PATH/{}*.bam; do \
-#   sorted_bam=\$OUTPUT_PATH/$(basename \$bam .bam).sorted.bam; \
-#   samtools sort -n -@ $THREADS -m 4G -o \$sorted_bam \$bam; \
-# done"
-# check_success "Bam files sorted"
+log_step "Mapping reads to phylonorwary database (10 parts) with bowtie2..."
+for db in {1..10}; do
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
+      bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.phyNor.$db.bam
+      if [ -s \"\$bam_file\" ]; then
+        echo \"Skipping {} for phylonorwary part $db, BAM file already exists and is not empty.\"
+      else
+        bowtie2 --threads $THREADS -k 1000 -t \
+          -x $DB_PATH_Norwary.$db-of-10 -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
+          samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/phyloNorwary.$db.log.txt
+      fi"
+    check_success "Mapping to phyloNorwary database part $db"
+done
+
+log_step "Mapping reads to core NT database with bowtie2..."
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
+  bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.core_nt.bam
+  if [ -s \"\$bam_file\" ]; then
+    echo \"Skipping {} for core NT, BAM file already exists and is not empty.\"
+  else
+    bowtie2 --threads $THREADS -k 1000 -t \
+      -x $DB_PATH_clean/core_nt.fas.gz -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
+      samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/core_nt.log.txt
+  fi"
+check_success "Mapping to core NT database"
+
+log_step "Mapping reads to plastid database with bowtie2..."
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
+  bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.pla.bam
+  if [ -s \"\$bam_file\" ]; then
+    echo \"Skipping {} for plastid, BAM file already exists and is not empty.\"
+  else
+    bowtie2 --threads $THREADS -k 1000 -t \
+      -x \"$DB_PATH_clean/refseq_plastid.genomic.fas.gz\" -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
+      samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/plastid.log.txt
+  fi"
+check_success "Mapping to plastid database"
+
+log_step "Mapping reads to bacterial database (33 parts) with bowtie2..."
+for db in {1..33}; do
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
+      bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.bac.$db.bam
+      if [ -s \"\$bam_file\" ]; then
+        echo \"Skipping {} for bacterial part $db, BAM file already exists and is not empty.\"
+      else
+        bowtie2 --threads $THREADS -k 1000 -t \
+          -x $DB_PATH_bac.$db.fas.gz -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
+          samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/bacterial.$db.log.txt
+      fi"
+    check_success "Mapping to bacterial database part $db"
+done
+
+log_step "Mapping reads to archaea database with bowtie2..."
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
+  bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.arc.bam
+  if [ -s \"\$bam_file\" ]; then
+    echo \"Skipping {} for archaea, BAM file already exists and is not empty.\"
+  else
+    bowtie2 --threads $THREADS -k 1000 -t \
+      -x \"$DB_PATH_clean/refseq_archaea.genomic.fas.gz\" -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
+      samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/archaea.log.txt
+  fi"
+check_success "Mapping to archaea database"
+
+log_step "Mapping reads to viral database with bowtie2..."
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
+  bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.vir.bam
+  if [ -s \"\$bam_file\" ]; then
+    echo \"Skipping {} for viral, BAM file already exists and is not empty.\"
+  else
+    bowtie2 --threads $THREADS -k 1000 -t \
+      -x \"$DB_PATH_clean/refseq_viral.genomic.fas.gz\" -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
+      samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/viral.log.txt
+  fi"
+check_success "Mapping to viral database"
+
+log_step "Mapping finished. Continuing with merging..."
+
+Now compress the BAM files using metaDMG
+log_step "Compressing BAM files using metaDMG..."
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" '
+  for bam in '"$OUTPUT_PATH"'/{}*.bam; do
+    /projects/wintherpedersen/apps/metaDMG_14jun24/metaDMG-cpp/misc/compressbam --threads 12 --input "$bam" --output "'"$OUTPUT_PATH"'"/$(basename "$bam" .bam).comp.bam;
+  done
+'
+check_success "Compressing BAM files"
+
+log_step "Sorting each BAM file before merging..."
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "for bam in $OUTPUT_PATH/{}*.bam; do \
+  sorted_bam=\$OUTPUT_PATH/$(basename \$bam .bam).sorted.bam; \
+  samtools sort -n -@ $THREADS -m 4G -o \$sorted_bam \$bam; \
+done"
+check_success "Bam files sorted"
 
 log_step "Merging all sorted BAM files..."
 cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "samtools merge -@ 5 -n -f $OUTPUT_PATH/{}.comp.sam.gz $OUTPUT_PATH/{}*.comp.bam.sorted.bam"
