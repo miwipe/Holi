@@ -9,7 +9,7 @@ Below you can find both a bash script guide for running the pipeline and a slurm
 ### Bash scripts
 
 ## Litterature to-date
-
+We have here collected all publications that have worked with ancient metagenomic data (excluding metabarcoding data) and focusing on the eukaryotic fraction. This list of papers builds upon and expands the already collected litterature in the [Inventory of ancient environmental DNA from sedimentary archives: locations, methods, and target taxa](https://zenodo.org/records/13761348). 
 
 
 
