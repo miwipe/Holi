@@ -4,20 +4,28 @@
 # Description: Comprehensive automated pipeline for preprocessing, mapping, filtering, and taxonomic classification of FASTQ files.
 # Requirements: GNU Parallel, fastp, vsearch, sga, bowtie2, samtools, filterBAM, conda
 
-# load needed tools
-conda activate holi
-module load samtools/1.21
+# # load needed tools
+# conda activate holi
+# module load samtools/1.21
 
+# Log file name
+LOG_FILE="holi_newdb_marsh2.log"
+# Number of threads for parallel
+THREADSP=7
+DB_PATH="/datasets/caeg_dataset/references/ncbi/20250205/data/wgs_eukaryota"
+DB_PATH_clean="/datasets/caeg_dataset/references/ncbi/20250205/data/"
+DB_PATH_Norwary="/datasets/caeg_dataset/references/phylo_norway/20250127/results/shard"
+DB_PATH_bac="/datasets/caeg_dataset/references/ncbi/20250205/data/refseq_bacteria.genomic"
+THREADS=10
+OUTPUT_PATH="/projects/caeg/people/bfj994/hashilan_marsh/out"
 
-# Log file name (can be a command line input, or seperated by tool)
-LOG_FILE="Holi.log"
-# Define number of threads for parallel (can be command line input with default value)
-THREADSP=5
+# Input path
+INPATH="/projects/caeg/scratch/for_nicola/hashilan_marsh"
 
-# redirect all output to logfile (can be seperated if needed)
+# Redirect all output to logfile
 exec > >(tee -i "$LOG_FILE") 2>&1
 
-# Funtion to check for output file after every command, to determine if the execusion was successful. 
+# Function to check success
 check_success() {
     if [ $? -ne 0 ]; then
         echo "[ERROR] $1 failed. Check the logs for details." | tee -a "$LOG_FILE"
@@ -25,229 +33,247 @@ check_success() {
     fi
 }
 
-# Logging function - will report date and time and the log message.
+# Logging function
 log_step() {
     echo "[$(date)] $1" | tee -a "$LOG_FILE"
 }
 
-#######################################################################################################################################
-## Holi pipeline:
+# Check if --skip-preprocessing is passed
+SKIP_PREPROCESSING=false
+for arg in "$@"; do
+  if [ "$arg" == "--skip-preprocessing" ]; then
+    SKIP_PREPROCESSING=true
+  fi
+done
 
-# Step 1: Generate a sample list
-log_step "Generating sample list..."
-ll *R1_001.fastq.gz | awk '{print $9}' | cut -f1 -d_ | uniq > sample.list
-check_success "Sample list generation"
+# Check if sample.list is passed as an argument
+SAMPLE_LIST=""
+for arg in "$@"; do
+  if [ -f "$arg" ]; then
+    SAMPLE_LIST="$arg"
+  fi
+done
 
-# Check sample list
-if [ ! -s sample.list ]; then
-    echo "[ERROR] Sample list is empty or not created." | tee -a "$LOG_FILE"
+if [ -z "$SAMPLE_LIST" ]; then
+    echo "[ERROR] No sample.list provided. Please provide a sample list file as an argument." | tee -a "$LOG_FILE"
     exit 1
 fi
-log_step "Sample list created with $(wc -l < sample.list) samples."
 
-# Step 2: Trimming and merging with fastp
-log_step "Trimming and merging reads with fastp..."
-cat sample.list | parallel -j $THREADSP 'fastp \
-  -i {}*R1*.fastq.gz \
-  -I {}*R2*.fastq.gz \
-  -m --merged_out {}.ppm.fq \
-  -V --detect_adapter_for_pe \
-  -D --dup_calc_accuracy 5 \
-  -g -x -q 30 -e 25 -l 30 -y -c -p \
-  -h {}.fastp.report.html -w 1'
-check_success "Trimming and merging reads"
-
-# Step 3: Duplicate removal with vsearch
-log_step "Removing duplicates with vsearch..."
-cat sample.list | parallel -j $THREADSP 'vsearch \
-  --fastx_uniques {}.ppm.fq \
-  --fastqout {}.ppm.vs.fq \
-  --minseqlength 30 \
-  --strand both'
-check_success "Duplicate removal"
-
-# Step 4: Low-complexity filtering with SGA
-log_step "Filtering low-complexity reads with SGA..."
-cat sample.list | parallel -j $THREADSP 'sga --dust {}.ppm.vs.fq > {}.ppm.vs.d4.fq'
-check_success "Low-complexity filtering"
-cat sample.list | parallel -j $THREADSP 'gzip {}.ppm.vs.d4.fq'
-check_success "Compressing filtered files"
-
-# Clean up intermediate files
-log_step "Cleaning up intermediate files..."
-rm -f *.ppm.fq *.ppm.vs.fq
-log_step "Intermediate files removed."
-
-# Part Two: Mapping, filtering, and taxonomic classification
-# Mapping with bowtie2
-log_step "Mapping reads to vertebrate mammal databases with bowtie2..."
-for db in {1..10}; do
-    cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-      -x /datasets/globe_databases/holi_db/vertebrate_mammalian/20231205/vert_mam.'$db' \
-      -U {}.ppm.vs.d4.fq --no-unal --mm -t | samtools view -bS - > {}.vert_mam.'$db'.bam' \
-      &> vert_mam.$db.log.txt
-    check_success "Mapping to database $db"
-done
-
-# Mapping with bowtie2
-log_step "Mapping reads to invertebrate databases with bowtie2..."
-for db in {1..6}; do
-    cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-      -x /datasets/globe_databases/holi_db/invertebrate/20231205/invert.'$db' \
-      -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.invert.'$db'.bam' \
-      &> invert.$db.log.txt
-    check_success "Mapping to invertebrate database $db"
-done
-
-log_step "Mapping reads to vertebrate other databases with bowtie2..."
-for db in {1..12}; do
-    cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-      -x /datasets/globe_databases/holi_db/vert_other/20231205/vert_other.'$db' \
-      -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.vert_other.'$db'.bam' \
-      &> vert_other.$db.log.txt
-    check_success "Mapping to vertebrate other database $db"
-done
-
-# Mapping with bowtie2 for plant databases (1 to 5)
-log_step "Mapping reads to plant databases with bowtie2..."
-for db in {1..5}; do
-    cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-      -x /datasets/globe_databases/holi_db/plant/20231205/plant.'$db' \
-      -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.plant.'$db'.bam' \
-      &> plant.$db.log.txt
-    check_success "Mapping to plant database $db"
-done
-
-# Mapping with bowtie2 for archaea_fungi_virus, plastid, mitochondrion, and protozoa databases
-log_step "Mapping reads to archaea, fungi, virus, plastid, mitochondrion, and protozoa databases with bowtie2..."
-for db in archaea fungi viral plastid mitochondrion protozoa; do
-    # Mapping for archaea
-    if [ "$db" == "archaea" ]; then
-        cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-          -x  /datasets/globe_databases/holi_db/archaea/20231205/archaea.fa \
-          -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.archaea.1.bam' \
-          &> archaea.1.log.txt
-    fi
-    # Mapping for fungi 
-    if [ "$db" == "fungi" ]; then
-        cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-          -x  /datasets/globe_databases/holi_db/fungi/20231205/fungi.fa \
-          -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.fungi.1.bam' \
-          &> fungi.1.log.txt
-    fi
-    # Mapping for viral
-    if [ "$db" == "viral" ]; then
-        cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-          -x  /datasets/globe_databases/holi_db/viral/20231205/viral.fa \
-          -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.viral.1.bam' \
-          &> viral.1.log.txt
-    fi
-    # Mapping for plastid
-    if [ "$db" == "plastid" ]; then
-        cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-          -x /datasets/globe_databases/holi_db/plastid/20231205/plastid.fa \
-          -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.plastid.1.bam' \
-          &> plastid.1.log.txt
-    fi
-    # Mapping for mitochondrion
-    if [ "$db" == "mitochondrion" ]; then
-        cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-          -x /datasets/globe_databases/holi_db/mito/20231205/mitochondrion.fa \
-          -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.mitochondrion.1.bam' \
-          &> mitochondrion.1.log.txt
-    fi
-    # Mapping for protozoa
-    if [ "$db" == "protozoa" ]; then
-        cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-          -x /datasets/globe_databases/holi_db/protozoa/20231205/protozoa.fa \
-          -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.protozoa.1.bam' \
-          &> protozoa.1.log.txt
-    fi
-    check_success "Mapping to $db database"
-done
+# Check if sample list file exists and is not empty
+if [ ! -s "$SAMPLE_LIST" ]; then
+    echo "[ERROR] Sample list file ($SAMPLE_LIST) is empty or does not exist." | tee -a "$LOG_FILE"
+    exit 1
+fi
 
 
-# Part Seven: Mapping to NCBI nt databases (nt.1 to nt.9)
-log_step "Mapping reads to NCBI nt databases with bowtie2..."
-for db in {1..9}; do
-    cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-      -x /datasets/globe_databases/holi_db/nt/20231201/nt.$db \
-      -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.nt.'$db'.bam' \
-      &> nt.$db.log.txt
-    check_success "Mapping to nt.$db database"
-done
+################### QC #########################
+if [ "$SKIP_PREPROCESSING" = false ]; then
+    log_step "Trimming and merging reads with fastp..."
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "fastp \
+      -i \"${INPATH}/{}\"*R1*.fastq.gz \
+      -I \"${INPATH}/{}\"*R2*.fastq.gz \
+      -m --merged_out '{}.ppm.fq' \
+      -V --detect_adapter_for_pe \
+      -D --dup_calc_accuracy 5 \
+      -g -x -q 30 -e 25 -l 30 -y -c -p \
+      -h '{}.fastp.report.html' -w 1"
+    check_success "Trimming and merging reads"
 
-# Part Eight: Mapping to Norway Plant Complete Genomes
-log_step "Mapping reads to Norway Plant complete genomes with bowtie2..."
-for db in {1..7}; do
-    cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-      -x /datasets/globe_databases/holi_db/phylonorway/20230803/PhyloNorwayContigs_${db}.fasta \
-      -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.PhyloNorwayContigs.'$db'.bam' \
-      &> PhyloNorwayContigs.$db.log.txt
-    check_success "Mapping to PhyloNorwayContigs.$db database"
-done
+    log_step "Removing duplicates with vsearch..."
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "vsearch \
+      --fastx_uniques '{}.ppm.fq' \
+      --fastqout '{}.ppm.vs.fq' \
+      --minseqlength 30 \
+      --strand both"
+    check_success "Duplicate removal"
 
-# Part Nine: Mapping to Arctic Animals
-log_step "Mapping reads to arctic animals supplementary database with bowtie2..."
+    log_step "Filtering low-complexity reads with SGA..."
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "sga preprocess --dust-threshold=1 -m 30 '{}.ppm.vs.fq' -o '{}.ppm.vs.d4.fq'"
+    check_success "Low-complexity filtering"
 
-cat sample.list | parallel -j $THREADSP 'bowtie2 --threads 24 -k 1000 -t \
-    -x /datasets/globe_databases/holi_db/arctic_animals/20230803/ArcticAnimal_sup.fa \
-    -U {}.ppm.vs.fq --no-unal --mm -t | samtools view -bS - > {}.ArcticAnimal_sup.bam' \
-    &> ArcticAnimal_sup.log.txt
-check_success "Mapping to ArcticAnimal_sup database"
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "gzip '{}.ppm.vs.d4.fq'"
+    check_success "Compressing filtered files"
 
+    log_step "Cleaning up intermediate files..."
+    rm -f *.ppm.fq *.ppm.vs.fq
+    log_step "Intermediate files removed."
+else
+    log_step "Skipping preprocessing steps."
+fi
 
-log_step "Mapping to all databases and initial filtering of bam files done. Continuing ..." 
-################################################################################################################################################
+################### MAPPING ######################
+# for db in {1..250}; do
+#     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
+#       bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.euk.$db.bam
+#       if [ -s \"\$bam_file\" ]; then
+#         echo \"Skipping {} for part $db, BAM file already exists and is not empty.\"
+#       else
+#         bowtie2 --threads $THREADS -k 1000 -t \
+#           -x $DB_PATH.$db.fas.gz -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
+#           samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/eukaryota.$db.log.txt
+#       fi"
+#     check_success "Mapping to eukaryote database part $db"
+# done
+#
+# log_step "Mapping reads to mitochondrion database with bowtie2..."
+# cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
+#   bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.mito.bam
+#   if [ -s \"\$bam_file\" ]; then
+#     echo \"Skipping {} for mitochondrion, BAM file already exists and is not empty.\"
+#   else
+#     bowtie2 --threads $THREADS -k 1000 -t \
+#       -x $DB_PATH_clean/refseq_mitochondrion.genomic.fas.gz -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
+#       samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/mitochondrion.log.txt
+#   fi"
+# check_success "Mapping to mitochondrion database"
+#
+# log_step "Mapping reads to phylonorwary database (10 parts) with bowtie2..."
+# for db in {1..10}; do
+#     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
+#       bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.phyNor.$db.bam
+#       if [ -s \"\$bam_file\" ]; then
+#         echo \"Skipping {} for phylonorwary part $db, BAM file already exists and is not empty.\"
+#       else
+#         bowtie2 --threads $THREADS -k 1000 -t \
+#           -x $DB_PATH_Norwary.$db-of-10 -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
+#           samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/phyloNorwary.$db.log.txt
+#       fi"
+#     check_success "Mapping to phyloNorwary database part $db"
+# done
+#
+# log_step "Mapping reads to core NT database with bowtie2..."
+# cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
+#   bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.core_nt.bam
+#   if [ -s \"\$bam_file\" ]; then
+#     echo \"Skipping {} for core NT, BAM file already exists and is not empty.\"
+#   else
+#     bowtie2 --threads $THREADS -k 1000 -t \
+#       -x $DB_PATH_clean/core_nt.fas.gz -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
+#       samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/core_nt.log.txt
+#   fi"
+# check_success "Mapping to core NT database"
+#
+# log_step "Mapping reads to plastid database with bowtie2..."
+# cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
+#   bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.pla.bam
+#   if [ -s \"\$bam_file\" ]; then
+#     echo \"Skipping {} for plastid, BAM file already exists and is not empty.\"
+#   else
+#     bowtie2 --threads $THREADS -k 1000 -t \
+#       -x \"$DB_PATH_clean/refseq_plastid.genomic.fas.gz\" -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
+#       samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/plastid.log.txt
+#   fi"
+# check_success "Mapping to plastid database"
+#
+# log_step "Mapping reads to bacterial database (33 parts) with bowtie2..."
+# for db in {1..33}; do
+#     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
+#       bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.bac.$db.bam
+#       if [ -s \"\$bam_file\" ]; then
+#         echo \"Skipping {} for bacterial part $db, BAM file already exists and is not empty.\"
+#       else
+#         bowtie2 --threads $THREADS -k 1000 -t \
+#           -x $DB_PATH_bac.$db.fas.gz -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
+#           samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/bacterial.$db.log.txt
+#       fi"
+#     check_success "Mapping to bacterial database part $db"
+# done
+#
+# log_step "Mapping reads to archaea database with bowtie2..."
+# cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
+#   bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.arc.bam
+#   if [ -s \"\$bam_file\" ]; then
+#     echo \"Skipping {} for archaea, BAM file already exists and is not empty.\"
+#   else
+#     bowtie2 --threads $THREADS -k 1000 -t \
+#       -x \"$DB_PATH_clean/refseq_archaea.genomic.fas.gz\" -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
+#       samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/archaea.log.txt
+#   fi"
+# check_success "Mapping to archaea database"
+#
+# log_step "Mapping reads to viral database with bowtie2..."
+# cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
+#   bam_file=$OUTPUT_PATH/{}.ppm.vs.d4.vir.bam
+#   if [ -s \"\$bam_file\" ]; then
+#     echo \"Skipping {} for viral, BAM file already exists and is not empty.\"
+#   else
+#     bowtie2 --threads $THREADS -k 1000 -t \
+#       -x \"$DB_PATH_clean/refseq_viral.genomic.fas.gz\" -U {}.ppm.vs.d4.fq.gz --no-unal --mm -t | \
+#       samtools view -bS - > \"\$bam_file\" 2> $OUTPUT_PATH/viral.log.txt
+#   fi"
+# check_success "Mapping to viral database"
+#
+# log_step "Mapping finished. Continuing with merging..."
 
-log_step "Merging BAM files per sample..."
-cat sample.list | parallel -j $THREADSP 'samtools merge -f {}.*.bam {}.comp.bam -@ 24'
-check_success "Merging BAM files"
+# Now compress the BAM files using metaDMG
+# log_step "Compressing BAM files using metaDMG..."
+# cat "$SAMPLE_LIST" | parallel -j "$THREADSP" '
+#   for bam in '"$OUTPUT_PATH"'/{}*.bam; do
+#     /projects/wintherpedersen/apps/metaDMG_14jun24/metaDMG-cpp/misc/compressbam --threads 12 --input "$bam" --output "'"$OUTPUT_PATH"'"/$(basename "$bam" .bam).comp.bam;
+#   done
+# '
+# check_success "Compressing BAM files"
 
-log_step "Sorting merged BAM file ..."
-cat sample.list | parallel -j $THREADSP 'samtools sort -n -@ 24 -m 50 -o {}.sort.comp.bam {}.comp.bam'
+# log_step "Sorting each BAM file before merging..."
+# cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "for bam in $OUTPUT_PATH/{}*.bam; do \
+#   sorted_bam=\$OUTPUT_PATH/$(basename \$bam .bam).sorted.bam; \
+#   samtools sort -n -@ $THREADS -m 4G -o \$sorted_bam \$bam; \
+# done"
+# check_success "Bam files sorted"
 
-log_step "Filtering BAM files with filterBAM ..."
-cat sample.list | parallel -j $THREADSP 'filterBAM reassign \
-  --bam {}.sort.comp.bam -t 4 -i 0 -A 92 -M 50G -m 10G -n 10 \
-  -o {}.sort.comp.reassign.bam &> {}.sort.comp.reassign.log.txt'
+log_step "Merging all sorted BAM files..."
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "samtools merge -@ 5 -n -f $OUTPUT_PATH/{}.comp.sam.gz $OUTPUT_PATH/{}*.comp.bam.sorted.bam"
+check_success "Merging BAM files to sam.gz"
+
+log_step "Compress bam..."
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/metaDMG_14jun24/metaDMG-cpp/misc/compressbam --threads 12 --input $OUTPUT_PATH/{}.comp.sam.gz --output $OUTPUT_PATH/{}.comp.bam"
+check_success "merged sam.gz files with compress bam"
+
+log_step "Filtering BAM files with filterBAM..."
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "filterBAM reassign \
+  --bam $OUTPUT_PATH/{}.comp.bam -t 4 -i 0 -A 92 -M 30G -m 5G -n 10 -s 0.75 \
+  -o $OUTPUT_PATH/{}.comp.reassign.bam &> $OUTPUT_PATH/{}.comp.reassign.log.txt"
 check_success "filterBAM reassign"
 
 log_step "Final filtering with filterBAM..."
-cat sample.list | parallel -j $THREADSP 'filterBAM filter \
-  -e 0.6 -M 50G -m 8G -t 4 -n 10 -A 92 -a 95 -N \
-  --bam {}.sort.comp.reassign.bam \
-  --stats {}.sort.comp.reassign.stats.tsv.gz \
-  --stats-filtered {}.sort.comp.reassign.stats-filtered.tsv.gz \
-  --bam-filtered {}.sort.comp.reassign.filtered.bam'
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "filterBAM filter \
+  -e 0.6 -m 8G -t 4 -n 10 -A 92 -a 95 -N \
+  --bam $OUTPUT_PATH/{}.comp.reassign.bam \
+  --stats $OUTPUT_PATH/{}.comp.reassign.stats.tsv.gz \
+  --stats-filtered $OUTPUT_PATH/{}.comp.reassign.stats-filtered.tsv.gz \
+  --bam-filtered $OUTPUT_PATH/{}.comp.reassign.filtered.bam"
 check_success "Final filtering"
 
-## INPUT SAMTOOL SORT
+log_step "Sorting merged BAM file..."
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "samtools sort -n -@ $THREADS -m 10G -o $OUTPUT_PATH/{}.sort.comp.reassign.filtered.bam" "$OUTPUT_PATH/{}.comp.reassign.filtered.bam"
+check_success "Sorting BAM file"
 
-# Taxonomic classification with metaDMG
 log_step "Running taxonomic classification with metaDMG..."
-cat sample.list | parallel -j $THREADSP '/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp lca \
-  --names /projects/wintherpedersen/data/ncbi_taxonomy_01Oct2022/names.dmp \
-  --nodes /projects/wintherpedersen/data/ncbi_taxonomy_01Oct2022/nodes.dmp \
-  --acc2tax /projects/wintherpedersen/data/ncbi_taxonomy_01Oct2022/combined_accession2taxid_20221112.gz \
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp lca \
+  --names /datasets/caeg_dataset/taxonomy/20250210/names.dmp \
+  --nodes /datasets/caeg_dataset/taxonomy/20250210/nodes.dmp \
+  --acc2tax /projects/caeg/people/bfj994/hashilan_marsh/newDBall.acc2taxid.gz \
   --sim_score_low 0.95 --sim_score_high 1.0 --how_many 30 --weight_type 1 \
-  --fix_ncbi 0 --threads 4 \
-  --bam {}.sort.comp.reassign.filtered.bam --out_prefix {}.sort.comp.reassign.filtered'
+  --fix_ncbi 0 --threads 10 --filtered_acc2tax $OUTPUT_PATH/{}.acc2tax \
+  --bam $OUTPUT_PATH/{}.sort.comp.reassign.filtered.bam --out_prefix $OUTPUT_PATH/{}.sort.comp.reassign.filtered"
 check_success "Taxonomic classification"
 
-log_step "Extracting DNA damage patterns with metaDMG..."
-cat sample.list | parallel -j $THREADSP '/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp dfit \
-  {}.comp.reassign2.filtered.bdamage.gz --threads 6 \
-  --names /projects/wintherpedersen/data/ncbi_taxonomy_01Oct2022/names.dmp \
-  --nodes /projects/wintherpedersen/data/ncbi_taxonomy_01Oct2022/nodes.dmp --showfits 2 --nopt 10 \
-  --nbootstrap 20 --doboot 1 --seed 1234 --lib ds --out {}.sort.comp.reassign.filtered'
-check_success "Extracting DNA damage patterns"
+log_step "Running damage estimation with metaDMG..."
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp dfit \
+	  $OUTPUT_PATH/{}.sort.comp.reassign.filtered.bdamage.gz --threads 6 \
+  	  --names /datasets/caeg_dataset/taxonomy/20250210/names.dmp \
+  	  --nodes /datasets/caeg_dataset/taxonomy/20250210/nodes.dmp \
+      --showfits 2 --nopt 10 \
+      --nbootstrap 20 --doboot 1 --seed 1234 --lib ds
+      --out_prefix $OUTPUT_PATH/{}.sort.comp.reassign.filtered" 
+check_success "Damage calculations done"
 
-log_step "Merging metaDMG outputs..."
-for file in *.bdamage.gz.stat.gz; do
-    zcat "$file" | tail -n +2 | awk -v filename="$file" '{print filename "\t" $0}' >> metadmg_data2.tsv
-done
-zcat *.bdamage.gz.stat.gz | head -1 > metadmg_header.tsv
-cat metadmg_header.tsv metadmg_data2.tsv > metadmg_data_final.tsv
+log_step "Aggregating lca and dfit metaDMG..."
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp aggregate \
+	  $OUTPUT_PATH/{}.sort.comp.reassign.filtered.bdamage.gz
+  	  --names /datasets/caeg_dataset/taxonomy/20250210/names.dmp \
+  	  --nodes /datasets/caeg_dataset/taxonomy/20250210/nodes.dmp \
+      --lcastat $OUTPUT_PATH/{}.sort.comp.reassign.filtered.stat.gz --dfit $OUTPUT_PATH/{}.sort.comp.reassign.filtered.dfit.gz --out_prefix $OUTPUT_PATH/{}.sort.comp.reassign.filtered.agg 
+check_success "Aggregation done."
 
-log_step "Pipeline completed successfully. Final outputs: metadmg_data_final.tsv, bam-filter_stats.tsv"
+echo "Pipeline completed successfully." | tee -a "$LOG_FILE"
