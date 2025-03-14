@@ -1,0 +1,14 @@
+name: env_2
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+- beast2=2.6.3=hf1b8bbb_0
+- mafft=7.475=h516909a_0
+- raxml-ng=1.0.1=h7447c1b_0
+- tabview
+- angsd
+- samtools
+- epa-ng
+- gappa
