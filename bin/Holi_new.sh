@@ -264,7 +264,7 @@ cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/met
   	  --names /datasets/caeg_dataset/taxonomy/20250210/names.dmp \
   	  --nodes /datasets/caeg_dataset/taxonomy/20250210/nodes.dmp \
       --showfits 2 --nopt 10 \
-      --nbootstrap 20 --doboot 1 --seed 1234 --lib ds
+      --nbootstrap 20 --doboot 1 --seed 1234 --lib ds \
       --out_prefix $OUTPUT_PATH/{}.sort.comp.reassign.filtered" 
 check_success "Damage calculations done"
 
