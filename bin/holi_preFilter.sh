@@ -226,7 +226,7 @@ cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/met
 	  $OUTPUT_PATH/{}.sort.comp.reassign.filtered.bdamage.gz \
   	  --names /datasets/caeg_dataset/taxonomy/20250210/names.dmp \
   	  --nodes /datasets/caeg_dataset/taxonomy/20250210/nodes.dmp \
-      --lcastat $OUTPUT_PATH/{}.sort.comp.reassign.filtered.stat.gz --dfit $OUTPUT_PATH/{}.sort.comp.reassign.filtered.dfit.gz --out_prefix $OUTPUT_PATH/{}.sort.comp.reassign.filtered.agg 
+      --lcastat $OUTPUT_PATH/{}.sort.comp.reassign.filtered.stat.gz --dfit $OUTPUT_PATH/{}.sort.comp.reassign.filtered.dfit.gz --out_prefix $OUTPUT_PATH/{}.sort.comp.reassign.filtered.agg" 
 check_success "Aggregation done."
 
 echo "Pipeline completed successfully." | tee -a "$LOG_FILE"
