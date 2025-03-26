@@ -4,26 +4,26 @@
 # Description: Comprehensive automated pipeline for preprocessing, mapping, filtering, and taxonomic classification of FASTQ files.
 # Requirements: GNU Parallel, fastp, vsearch, sga, bowtie2, samtools, filterBAM, conda, seqtk 
 
-# # load needed tools
-# conda activate holi
+# Load needed tools
+#conda activate holi
 module load samtools/1.21
 module load seqtk/1.4
 module load bowtie2/2.4.2 
 
 # Log file name
-LOG_FILE="holi_newdb_marsh2.log"
+LOG_FILE="yourlogfilename.log"
 # Number of threads for parallel
 THREADSP=7
 DB_PATH="/datasets/caeg_dataset/references/ncbi/20250205/data/wgs_eukaryota"
 DB_PATH_clean="/datasets/caeg_dataset/references/ncbi/20250205/data/"
 DB_PATH_Norwary="/datasets/caeg_dataset/references/phylo_norway/20250127/results/shard"
-DB_PATH_bac="/maps/projects/lundbeck/scratch/for_mikkel/DB/hires-organelles-viruses-smags/pkg/db/bowtie2/hires-organelles-viruses-smag"
-TAX_PATH_BAC="/maps/projects/lundbeck/scratch/for_mikkel/DB/hires-organelles-viruses-smags/pkg/taxonomy"
+DB_PATH_bac="/maps/projects/lundbeck/scratch/for_mikkel/DB/hires-organelles-viruses-smags/pkg/db/bowtie2/hires-organelles-viruses-smags"
+TAX_PATH_BAC="/maps/projects/lundbeck/scratch/for_mikkel/DB/hires-organelles-viruses-smag/pkg/taxonomy"
 THREADS=10
-OUTPUT_PATH="/projects/caeg/people/bfj994/hashilan_marsh/out"
+OUTPUT_PATH="/path/to/output/directory"
 
 # Input path
-INPATH="/projects/caeg/scratch/for_nicola/hashilan_marsh"
+INPATH="/path/to/input/fastq/files/"
 
 # Redirect all output to logfile
 exec > >(tee -i "$LOG_FILE") 2>&1
@@ -44,49 +44,62 @@ log_step() {
 #######################################################################################################################################
 ## Holi pipeline:
 
-# Check if sample.list is passed as an argument
-if [ -z "$1" ]; then
-    echo "[ERROR] No sample.list provided. Please provide a sample list file as an argument." | tee -a "$LOG_FILE"
-    exit 1
-else
-    SAMPLE_LIST="$1"
-fi
+# Check for command-line arguments
+SKIP_PREPROCESSING=false
+while [[ "$1" != "" ]]; do
+    case $1 in
+        --skip-preprocessing ) SKIP_PREPROCESSING=true ;;
+        * ) SAMPLE_LIST="$1" ;;
+    esac
+    shift
+done
 
 # Check if sample list file exists and is not empty
+if [ -z "$SAMPLE_LIST" ]; then
+    echo "[ERROR] No sample.list provided. Please provide a sample list file as an argument." | tee -a "$LOG_FILE"
+    exit 1
+fi
+
 if [ ! -s "$SAMPLE_LIST" ]; then
     echo "[ERROR] Sample list file ($SAMPLE_LIST) is empty or does not exist." | tee -a "$LOG_FILE"
     exit 1
 fi
-####################### QC ##############################
-log_step "Trimming and merging reads with fastp..."
-cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "fastp \
-  -i \"${INPATH}/{}\"*R1*.fastq.gz \
-  -I \"${INPATH}/{}\"*R2*.fastq.gz \
-  -m --merged_out '{}.ppm.fq' \
-  -V --detect_adapter_for_pe \
-  -D --dup_calc_accuracy 5 \
-  -g -x -q 30 -e 25 -l 30 -y -c -p \
-  -h '{}.fastp.report.html' -w 1"
-check_success "Trimming and merging reads"
 
-log_step "Removing duplicates with vsearch..."
-cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "vsearch \
-  --fastx_uniques '{}.ppm.fq' \
-  --fastqout '{}.ppm.vs.fq' \
-  --minseqlength 30 \
-  --strand both"
-check_success "Duplicate removal"
+if [ "$SKIP_PREPROCESSING" = false ]; then
+    ####################### QC ##############################
+    log_step "Trimming and merging reads with fastp..."
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "fastp \
+      -i \"${INPATH}/{}\"*R1*.fastq.gz \
+      -I \"${INPATH}/{}\"*R2*.fastq.gz \
+      -m --merged_out '{}.ppm.fq' \
+      -V --detect_adapter_for_pe \
+      -D --dup_calc_accuracy 5 \
+      -g -x -q 30 -e 25 -l 30 -y -c -p \
+      -h '{}.fastp.report.html' -w 1"
+    check_success "Trimming and merging reads"
 
-log_step "Filtering low-complexity reads with SGA..."
-cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "sga preprocess --dust-threshold=1 -m 30 '{}.ppm.vs.fq' -o '{}.ppm.vs.d4.fq'"
-check_success "Low-complexity filtering"
+    log_step "Removing duplicates with vsearch..."
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "vsearch \
+      --fastx_uniques '{}.ppm.fq' \
+      --fastqout '{}.ppm.vs.fq' \
+      --minseqlength 30 \
+      --strand both"
+    check_success "Duplicate removal"
 
-cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "gzip '{}.ppm.vs.d4.fq'"
-check_success "Compressing filtered files"
+    log_step "Filtering low-complexity reads with SGA..."
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "sga preprocess --dust-threshold=1 -m 30 '{}.ppm.vs.fq' -o '{}.ppm.vs.d4.fq'"
+    check_success "Low-complexity filtering"
 
-log_step "Cleaning up intermediate files..."
-rm -f *.ppm.fq *.ppm.vs.fq
-log_step "Intermediate files removed."
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "gzip '{}.ppm.vs.d4.fq'"
+    check_success "Compressing filtered files"
+
+    log_step "Cleaning up intermediate files..."
+    rm -f *.ppm.fq *.ppm.vs.fq
+    log_step "Intermediate files removed."
+else
+    log_step "Skipping preprocessing as requested."
+fi
+
 
 ###################### MAPPING AGAINST GTDB ###################################
 
@@ -102,7 +115,13 @@ cat "$SAMPLE_LIST" | parallel -j 4 "filterBAM reassign --bam '$OUTPUT_PATH'/{}.s
 # FilterBAM Filter
 cat "$SAMPLE_LIST" | parallel -j 4 "filterBAM filter -t 12 --bam '$OUTPUT_PATH'/{}.reassign.bam -m 8G --stats '$OUTPUT_PATH'/{}_stats.tsv.gz --stats-filtered '$OUTPUT_PATH'/{}_stats_filtered.tsv.gz -A 92 -a 92 --min-read-count 10 --min-expected-breadth-ratio 0.75 --min-normalized-entropy 0.6 --min-breadth 0.01 --include-low-detection --bam-filtered '$OUTPUT_PATH'/{}.filtered.bam"
 
-cat "$SAMPLE_LIST" | parallel -j 4 "filterBAM lca --bam '$OUTPUT_PATH'/{}.filtered.bam -p '$OUTPUT_PATH'/{}.filtered -m 8G --names '$TAX_PATH_BAC'/names.dmp --nodes '$TAX_PATH_BAC'/nodes.dmp --acc2taxid '$TAX_PATH_BAC'/acc2taxid.map.gz " 
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp lca \
+  --names '$TAX_PATH_BAC'/names.dmp \
+  --nodes '$TAX_PATH_BAC'/nodes.dmp \
+  --acc2tax '$TAX_PATH_BAC'/acc2taxid.map.gz \
+  --sim_score_low 0.95 --sim_score_high 1.0 --how_many 30 --weight_type 1 \
+  --fix_ncbi 0 --threads 10 --filtered_acc2tax $OUTPUT_PATH/{}.acc2tax \
+  --bam $OUTPUT_PATH/{}.filtered.bam --out_prefix $OUTPUT_PATH/{}.filtered"
 
 cat "$SAMPLE_LIST" | parallel -j 4 "zgrep -i -E 'Archaea|virus|bacteria' {}.filtered.lca.gz | cut -f1 > {}.bact_reads.txt" 
 
