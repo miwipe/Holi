@@ -103,14 +103,14 @@ fi
 
 ###################### MAPPING AGAINST GTDB ###################################
 
-# Bowtie2 mapping
+Bowtie2 mapping
 cat "$SAMPLE_LIST" | parallel -j 4 "bowtie2 --threads 20 -x '$DB_PATH_bac' -k 1000 -D 15 -R 2 -N 1 -L 22 -i S,1,1.15 --np 1 --mp '1,1' --rdg '0,1' --rfg '0,1' --score-min 'L,0,-0.1' --mm --no-unal -U {}.ppm.vs.d4.fq.gz -S '$OUTPUT_PATH'/{}.bam 2> '$OUTPUT_PATH'/{}_bowtie2.log"
 
 # Sorting BAM with Samtools
 cat "$SAMPLE_LIST" | parallel -j 4 "samtools sort -@ 12 -m 8G -o '$OUTPUT_PATH'/{}.sort.bam '$OUTPUT_PATH'/{}.bam"
 
 # FilterBAM Reassign
-cat "$SAMPLE_LIST" | parallel -j 4 "filterBAM reassign --bam '$OUTPUT_PATH'/{}.sort.bam -t 4 -i 0 --min-read-ani 92 --min-read-count 3 -M 8G -o '$OUTPUT_PATH'/{}.reassign.bam"
+cat "$SAMPLE_LIST" | parallel -j 1 "filterBAM reassign --bam '$OUTPUT_PATH'/{}.sort.bam -t 2 -i 0 --min-read-ani 92 --min-read-count 3 -m 2G -M 8G -o '$OUTPUT_PATH'/{}.reassign.bam"
 
 # FilterBAM Filter
 cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "filterBAM filter -t 12 --bam '$OUTPUT_PATH'/{}.reassign.bam -m 8G --stats '$OUTPUT_PATH'/{}_stats.tsv.gz --stats-filtered '$OUTPUT_PATH'/{}_stats_filtered.tsv.gz -A 92 -a 92 --min-read-count 10 --min-expected-breadth-ratio 0.75 --min-normalized-entropy 0.6 --min-breadth 0.01 --include-low-detection --bam-filtered '$OUTPUT_PATH'/{}.filtered.bam"
@@ -144,7 +144,7 @@ parallel -j 4 "comm -23 ${OUTPUT_PATH}/{}.all_reads.sorted.txt ${OUTPUT_PATH}/{}
 # Step 6: Extract eukaryotic reads
 parallel -j 4 "seqtk subseq {}.ppm.vs.d4.fq.gz ${OUTPUT_PATH}/{}.euk_reads.txt | gzip > ${OUTPUT_PATH}/{}.euk.fastq.gz" :::: "$SAMPLE_LIST"
 
- 
+
 
 # ###################### MAPPING READS - PART 2##################################
 
@@ -158,27 +158,27 @@ done
 
 log_step "Mapping reads to mitochondrion database with bowtie2..."
 cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "bowtie2 --threads $THREADS -k 1000 -t \
-  -x $DB_PATH_clean/refseq_mitochondrion.genomic.fas.gz -U {}.euk.fastq.gz --no-unal --mm -t | \
+  -x $DB_PATH_clean/refseq_mitochondrion.genomic.fas.gz -U $OUTPUT_PATH/{}.euk.fastq.gz --no-unal --mm -t | \
   samtools view -bS - > $OUTPUT_PATH/{}.mito.bam 2> $OUTPUT_PATH/mitochondrion.log.txt"
 check_success "Mapping to mitochondrion database"
 
-log_step "Mapping reads to phylonorwary database (10 parts) with bowtie2..."
+log_step "Mapping reads to phylonorwary database \(10 parts\) with bowtie2..."
 for db in {1..10}; do
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "bowtie2 --threads $THREADS -k 1000 -t \
-      -x $DB_PATH_Norwary.$db-of-10 -U {}.euk.fastq.gz --no-unal --mm -t | \
+      -x $DB_PATH_Norwary.$db-of-10 -U $OUTPUT_PATH/{}.euk.fastq.gz --no-unal --mm -t | \
       samtools view -bS - > $OUTPUT_PATH/{}.phyNor.$db.bam 2> $OUTPUT_PATH/phyloNorwary.$db.log.txt"
     check_success "Mapping to phyloNorwary database part $db"
 done
 
 log_step "Mapping reads to core NT database with bowtie2..."
 cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "bowtie2 --threads $THREADS -k 1000 -t \
-  -x $DB_PATH_clean/core_nt.fas.gz -U {}.euk.fastq.gz --no-unal --mm -t | \
+  -x $DB_PATH_clean/core_nt.fas.gz -U $OUTPUT_PATH/{}.euk.fastq.gz --no-unal --mm -t | \
   samtools view -bS - > $OUTPUT_PATH/{}.core_nt.bam 2> $OUTPUT_PATH/core_nt.log.txt"
 check_success "Mapping to core NT database"
 
 log_step "Mapping reads to plastid database with bowtie2..."
 cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "bowtie2 --threads $THREADS -k 1000 -t \
-  -x \"$DB_PATH_clean/refseq_plastid.genomic.fas.gz\" -U {}.euk.fastq.gz --no-unal --mm -t | \
+  -x $DB_PATH_clean/refseq_plastid.genomic.fas.gz -U $OUTPUT_PATH/{}.euk.fastq.gz --no-unal --mm -t | \
   samtools view -bS - > $OUTPUT_PATH/{}.pla.bam 2> $OUTPUT_PATH/plastid.log.txt"
 check_success "Mapping to plastid database"
 
