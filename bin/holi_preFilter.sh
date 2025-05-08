@@ -2,28 +2,42 @@
 
 # Script: Holi.sh
 # Description: Comprehensive automated pipeline for preprocessing, mapping, filtering, and taxonomic classification of FASTQ files.
-# Requirements: GNU Parallel, fastp, vsearch, sga, bowtie2, samtools, filterBAM, conda, seqtk 
+# Requirements: GNU Parallel, fastp, vsearch, sga, bowtie2, samtools, filterBAM, conda, seqtk, getRtax
 
-# Load needed tools
-#conda activate holi
 module load samtools/1.21
 module load seqtk/1.4
 module load bowtie2/2.4.2 
 
-# Log file name
-LOG_FILE="picareiro.log"
-# Number of threads for parallel
-THREADSP=7
-DB_PATH="/datasets/caeg_dataset/references/ncbi/20250205/data/wgs_eukaryota"
-DB_PATH_clean="/datasets/caeg_dataset/references/ncbi/20250205/data/"
-DB_PATH_Norwary="/datasets/caeg_dataset/references/phylo_norway/20250127/results/shard"
-DB_PATH_bac="/maps/projects/lundbeck/scratch/for_mikkel/DB/hires-organelles-viruses-smags/pkg/db/bowtie2/hires-organelles-viruses-smags"
-TAX_PATH_BAC="/maps/projects/lundbeck/scratch/for_mikkel/DB/hires-organelles-viruses-smags/pkg/taxonomy"
-THREADS=10
-OUTPUT_PATH="/projects/caeg/people/bfj994/holi_pre/out_picareiro"
+# -------------------------------
+# Load config file 
+# -------------------------------
 
-# Input path
-INPATH="/projects/caeg/people/bfj994/holi_pre/picareiro"
+CONFIG=${1:-config.yml}
+SAMPLE_LIST="$2"
+
+load_config() {
+    CONFIG_FILE="$1"
+    get_value() {
+        grep "^$1:" "$CONFIG_FILE" | sed 's/^.*:[[:space:]]*//' | sed 's/"//g'
+    }
+
+    LOG_FILE=$(get_value "LOG_FILE")
+    THREADSP=$(get_value "THREADSP")
+    DB_PATH=$(get_value "DB_PATH")
+    DB_PATH_clean=$(get_value "DB_PATH_clean")
+    DB_PATH_Norwary=$(get_value "DB_PATH_Norwary")
+    DB_PATH_bac=$(get_value "DB_PATH_bac")
+    TAX_PATH_BAC=$(get_value "TAX_PATH_BAC")
+    TAX_PATH_BAC_TSV=$(get_value "TAX_PATH_BAC_TSV")
+    THREADS=$(get_value "THREADS")
+    OUTPUT_PATH=$(get_value "OUTPUT_PATH")
+    RESULT_PATH=$(get_value "RESULT_PATH")
+    INPATH=$(get_value "INPATH")
+	EUK_PATH=$(get_value "EUK_PATH")
+}
+
+load_config "$CONFIG"
+echo "[INFO] Loaded config from $CONFIG"
 
 # Redirect all output to logfile
 exec > >(tee -i "$LOG_FILE") 2>&1
@@ -101,54 +115,45 @@ else
 fi
 
 
-###################### MAPPING AGAINST GTDB ###################################
+# -------------------------------
+# Step 1: Mapping against GTDB
+# -------------------------------
+log_step "Starting mapping and taxonomic classification..."
 
-Bowtie2 mapping
-cat "$SAMPLE_LIST" | parallel -j 4 "bowtie2 --threads 20 -x '$DB_PATH_bac' -k 1000 -D 15 -R 2 -N 1 -L 22 -i S,1,1.15 --np 1 --mp '1,1' --rdg '0,1' --rfg '0,1' --score-min 'L,0,-0.1' --mm --no-unal -U {}.ppm.vs.d4.fq.gz -S '$OUTPUT_PATH'/{}.bam 2> '$OUTPUT_PATH'/{}_bowtie2.log"
+#Mapping with Bowtie2 (commented out for now, adjust if needed)
+parallel -j 4 "bowtie2 --threads 20 -x '$DB_PATH_bac' -p 8 -k 1000 -D 15 -R 2 -N 1 -L 22 -i S,1,1.15 --np 1 --mp '1,1' --rdg '0,1' --rfg '0,1' --score-min 'L,0,-0.1' --mm --no-unal -U {}.ppm.vs.d4.fq.gz -S '$OUTPUT_PATH'/{}.bam 2> '$OUTPUT_PATH'/{}_bowtie2.log" :::: "$SAMPLE_LIST"
 
-# Sorting BAM with Samtools
-cat "$SAMPLE_LIST" | parallel -j 4 "samtools sort -@ 12 -m 8G -o '$OUTPUT_PATH'/{}.sort.bam '$OUTPUT_PATH'/{}.bam"
+Sorting BAM files
+parallel -j 4 "samtools sort -@ 12 -m 8G -o '$OUTPUT_PATH'/{}.sort.bam '$OUTPUT_PATH'/{}.bam" :::: "$SAMPLE_LIST"
 
-# FilterBAM Reassign
-cat "$SAMPLE_LIST" | parallel -j 1 "filterBAM reassign --bam '$OUTPUT_PATH'/{}.sort.bam -t 2 -i 0 --min-read-ani 92 --min-read-count 3 -m 2G -M 8G -o '$OUTPUT_PATH'/{}.reassign.bam"
+# Taxonomic classification
+parallel -j 2 "getRTax --bam '$OUTPUT_PATH'/{}.bam -T $TAX_PATH_BAC_TSV -r '{\"domain\":[\"d__Bacteria\", \"d__Archaea\", \"d__Viruses\"]}' --threads 8 --unique --only-read-ids -p '$RESULT_PATH'/{}.bact_reads.txt" :::: "$SAMPLE_LIST"
 
-# FilterBAM Filter
-cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "filterBAM filter -t 12 --bam '$OUTPUT_PATH'/{}.reassign.bam -m 8G --stats '$OUTPUT_PATH'/{}_stats.tsv.gz --stats-filtered '$OUTPUT_PATH'/{}_stats_filtered.tsv.gz -A 92 -a 92 --min-read-count 10 --min-expected-breadth-ratio 0.75 --min-normalized-entropy 0.6 --min-breadth 0.01 --include-low-detection --bam-filtered '$OUTPUT_PATH'/{}.filtered.bam"
-
-cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "samtools sort -n -@ $THREADS -m 10G -o $OUTPUT_PATH/{}.sort.filtered.bam" "$OUTPUT_PATH/{}.filtered.bam"
-
-cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp lca \
-  --names '$TAX_PATH_BAC'/names.dmp \
-  --nodes '$TAX_PATH_BAC'/nodes.dmp \
-  --acc2tax '$TAX_PATH_BAC'/acc2taxid.map.gz \
-  --sim_score_low 0.95 --sim_score_high 1.0 --how_many 30 --weight_type 1 \
-  --fix_ncbi 0 --threads 10 --filtered_acc2tax $OUTPUT_PATH/{}.acc2tax \
-  --bam $OUTPUT_PATH/{}.sort.filtered.bam --out_prefix $OUTPUT_PATH/{}.filtered"
-
-# Step 1: Extract bacterial reads
-parallel -j 4 "zgrep -i -E 'Archaea|virus|bacteria' ${OUTPUT_PATH}/{}.filtered.lca.gz | cut -f1 > ${OUTPUT_PATH}/{}.bact_reads.txt" :::: "$SAMPLE_LIST"
+parallel -j 4 "zcat $RESULT_PATH/{}.bact_reads.txt* > $RESULT_PATH/{}.bact_reads_all.txt" :::: "$SAMPLE_LIST"
 
 # Step 2: Extract sequences for bacterial reads
-parallel -j 4 "seqtk subseq {}.ppm.vs.d4.fq.gz ${OUTPUT_PATH}/{}.bact_reads.txt | gzip > ${OUTPUT_PATH}/{}.bact_reads.fq.gz" :::: "$SAMPLE_LIST"
+parallel -j 4 "seqtk subseq {}.ppm.vs.d4.fq.gz $RESULT_PATH/{}.bact_reads_all.txt | gzip > $RESULT_PATH/{}.bact_reads.fq.gz" :::: "$SAMPLE_LIST"
 
 # Step 3: Extract all read IDs
-parallel -j 4 "zcat {}.ppm.vs.d4.fq.gz | awk 'NR%4==1 {split(substr(\$0, 2), a, \" \"); print a[1]}' > ${OUTPUT_PATH}/{}.all_reads.txt" :::: "$SAMPLE_LIST"
+parallel -j 4 "zcat {}.ppm.vs.d4.fq.gz | awk 'NR%4==1 {split(substr(\$0, 2), a, \" \"); print a[1]}' > $RESULT_PATH/{}.all_reads.txt" :::: "$SAMPLE_LIST"
 
-# Step 4: Ensure sorted inputs before running `comm`
-parallel -j 4 "sort ${OUTPUT_PATH}/{}.all_reads.txt > ${OUTPUT_PATH}/{}.all_reads.sorted.txt" :::: "$SAMPLE_LIST"
-parallel -j 4 "sort ${OUTPUT_PATH}/{}.bact_reads.txt > ${OUTPUT_PATH}/{}.bact_reads.sorted.txt" :::: "$SAMPLE_LIST"
+# Step 4: Sort read ID lists
+parallel -j 4 "sort $RESULT_PATH/{}.all_reads.txt > $RESULT_PATH/{}.all_reads.sorted.txt" :::: "$SAMPLE_LIST"
+parallel -j 4 "sort $RESULT_PATH/{}.bact_reads_all.txt > $RESULT_PATH/{}.bact_reads_all.sorted.txt" :::: "$SAMPLE_LIST"
 
-# Step 5: Find eukaryotic reads (all - bacterial)
-parallel -j 4 "comm -23 ${OUTPUT_PATH}/{}.all_reads.sorted.txt ${OUTPUT_PATH}/{}.bact_reads.sorted.txt > ${OUTPUT_PATH}/{}.euk_reads.txt" :::: "$SAMPLE_LIST"
+# Step 5: Identify eukaryotic reads
+parallel -j 4 "comm -23 $RESULT_PATH/{}.all_reads.sorted.txt $RESULT_PATH/{}.bact_reads_all.sorted.txt > $RESULT_PATH/{}.euk_reads.txt" :::: "$SAMPLE_LIST"
 
 # Step 6: Extract eukaryotic reads
-parallel -j 4 "seqtk subseq {}.ppm.vs.d4.fq.gz ${OUTPUT_PATH}/{}.euk_reads.txt | gzip > ${OUTPUT_PATH}/{}.euk.fastq.gz" :::: "$SAMPLE_LIST"
+parallel -j 4 "seqtk subseq {}.ppm.vs.d4.fq.gz $RESULT_PATH/{}.euk_reads.txt | gzip > $RESULT_PATH/{}.euk.fastq.gz" :::: "$SAMPLE_LIST"
 
-
+######### INTERLUDE FOR PREVIOUSLY MAPPED FILES #############################
+#Step X: Remove bacterial reads from BAM
+#parallel -j 4 "samtools view -h '$EUK_PATH'/{}.comp.reassign.filtered.bam | grep -v -F -f $RESULT_PATH/{}.bact_reads_all.txt | samtools view -@ 4 -b -o '$RESULT_PATH'/{}.no_bact.bam" :::: "$SAMPLE_LIST"
 
 # ###################### MAPPING READS - PART 2##################################
 
-log_step "Mapping reads to eukaryote database (250 parts) with bowtie2..."
+log_step "Mapping reads to eukaryote database \(250 parts\) with bowtie2..."
 for db in {1..250}; do
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "bowtie2 --threads $THREADS -k 1000 -t \
       -x $DB_PATH.$db.fas.gz -U $OUTPUT_PATH/{}.euk.fastq.gz --no-unal --mm -t | \
@@ -237,7 +242,7 @@ cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/met
   --names /datasets/caeg_dataset/taxonomy/20250210/names.dmp \
   --nodes /datasets/caeg_dataset/taxonomy/20250210/nodes.dmp \
   --acc2tax /projects/caeg/people/bfj994/hashilan_marsh/newDBall.acc2taxid.gz \
-  --sim_score_low 0.95 --sim_score_high 1.0 --how_many 30 --weight_type 1 \
+  --sim_score_low 0.95 --sim_score_high 1.0 --how_many 15 --weight_type 0 \
   --fix_ncbi 0 --threads 10 --filtered_acc2tax $OUTPUT_PATH/{}.acc2tax \
   --bam $OUTPUT_PATH/{}.sort.comp.reassign.filtered.bam --out_prefix $OUTPUT_PATH/{}.sort.comp.reassign.filtered"
 check_success "Taxonomic classification"
