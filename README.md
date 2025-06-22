@@ -24,5 +24,22 @@ Our aim is for this resource to be continuously updated and valuable to the rese
 
 ![Barplot of all litterature categorized and cumulative](figures/barplot_cumsum_no_publications_methods.png)
 
+---
+
+## How to Run the R Script for Visualization
+
+This repository includes an R script that generates the visualizations shown above, using data sourced from a shared Google Sheet.
+
+### To run and plot the figures clone the git repo
+
+git clone https://github.com/miwipe/Holi.git
+
+### Now open the R project (sedaDNA_litterature.Rproj) in your terminal or in the Rstudio GUI, and run through the generate_figures.R script.
+
+ 
+
+
+
+
 
 
