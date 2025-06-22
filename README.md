@@ -24,6 +24,9 @@ Our aim is for this resource to be continuously updated and valuable to the rese
 
 ![Barplot of all litterature categorized and cumulative](figures/barplot_cumsum_no_publications_methods.png)
 
+![Bar plot of databases used to map against](figures/barplot_N_databases.png)
+
+![Bar plot of different "mappers" used to align reads against refence genomes](figures/barplot_no_publications_methods.png)
 ---
 
 ## How to Run the R Script for Visualization

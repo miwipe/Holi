@@ -174,7 +174,7 @@ coordinates %>%
   )
 
 ggsave("../../figures/barplot_cumsum_no_publications_methods.png", width = 6, height = 4, dpi = 300)
-ggsave("barplot_cumsum_no_publications.pdf", width = 6, height = 4)
+
 
 
 # -----------------------------
@@ -204,7 +204,7 @@ coordinates %>%
     fill = "Molecular Method"
   )
 
-ggsave("barplot_no_publications_methods.pdf", width = 8, height = 5)
+ggsave("../../figures/barplot_no_publications_methods.png", width = 8, height = 5, dpi = 300)
 
 
 # -----------------------------
@@ -233,7 +233,7 @@ coordinates %>%
     y = "Number of Publications"
   )
 
-ggsave("barplot_N_databases.pdf", width = 8, height = 5)
+ggsave("../../figures/barplot_N_databases.png", width = 8, height = 5, dpi = 300)
 
 
 #### END OF SCRIPT
