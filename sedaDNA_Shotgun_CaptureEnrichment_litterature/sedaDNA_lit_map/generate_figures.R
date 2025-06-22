@@ -46,7 +46,7 @@ lapply(required_packages, library, character.only = TRUE)
 gs4_auth()
 coordinates <- read_sheet(
   "https://docs.google.com/spreadsheets/d/13cmBUi4cigUaTKtQeFLFvS0gXT8AeWxWKzHv2UcOBCI/edit?gid=0#gid=0", 
-  sheet = "Table1"
+  sheet = "Eukaryotes"
 )
 
 
@@ -111,6 +111,7 @@ ggplot() +
 
 ggsave("../../figures/SG_TE_map_method.png", width = 10, height = 7, dpi = 300)
 
+colnames(coordinates)
 
 # -----------------------------
 # Yearly Publication Barplot
@@ -224,6 +225,34 @@ coordinates %>%
   count() %>%
   ungroup() %>%
   ggplot(aes(reference_target, n)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  theme_test() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
+  labs(
+    title = "Publications by Reference Databases",
+    x = "Reference Target",
+    y = "Number of Publications"
+  )
+
+ggsave("../../figures/barplot_N_databases.png", width = 8, height = 5, dpi = 300)
+
+# -----------------------------
+# Publications by Mappers
+# -----------------------------
+# Count number of publications using each reference database and visualize.
+coordinates %>%
+  filter(
+    year_published != "NA",
+    TargetGroup != "Microorganisms",
+    TargetTaxa != "Microorganisms",
+    TargetTaxa != "Prokaryotes"
+  ) %>%
+  select(mapper, DOI) %>%
+  unique() %>%
+  group_by(mapper) %>%
+  count() %>%
+  ungroup() %>%
+  ggplot(aes(mapper, n)) +
   geom_bar(stat = "identity", position = "dodge") +
   theme_test() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
