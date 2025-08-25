@@ -50,7 +50,7 @@ load_config() {
     THREADSP=$(get_value "THREADSP")
     DB_PATH=$(get_value "DB_PATH")
     DB_PATH_clean=$(get_value "DB_PATH_clean")
-	TAX_PATH_NCBI=$(get_value"TAX_PATH_NCBI")
+	TAX_PATH_NCBI=$(get_value "TAX_PATH_NCBI")
     DB_PATH_Norwary=$(get_value "DB_PATH_Norwary")
     DB_PATH_bac=$(get_value "DB_PATH_bac")
     TAX_PATH_BAC=$(get_value "TAX_PATH_BAC")
@@ -167,15 +167,13 @@ fi
 # -------------------------------
 log_step "Starting mapping and taxonomic classification against GTDB..."
 
-# Map against each of the 7 GTDB chunks
+Map against each of the 7 GTDB chunks
 for db in {1..7}; do
-    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "bowtie2 --threads $THREADS -k 1000 -D 15 -R 2 -N 1 -L 22 \
-      -i S,1,1.15 --np 1 --mp '1,1' --rdg '0,1' --rfg '0,1' --score-min 'L,0,-0.1' \
-      --mm --no-unal -x $DB_PATH_bac.$db \
-      -U {}.ppm.vs.d4.fq.gz \
-      | samtools view -bS - > $MICROB_OUT/{}.gtdb.$db.bam 2> $MICROB_OUT/{}_gtdb.$db.log.txt"
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "bowtie2 --threads $THREADS -x $DB_PATH_bac.$db.fas.gz -U {}.ppm.vs.d4.fq.gz -k 1000 -D 15 -R 2 -N 1 -L 22 -i S,1,1.15 --np 1 --mp '1,1' --rdg '0,1' --rfg '0,1' --score-min 'L,0,-0.1' --mm --no-unal \
+		 | samtools view -bS - > $MICROB_OUT/{}.gtdb.$db.bam 2> $MICROB_OUT/{}.gtdb.$db.log.txt"
     check_success "Mapping to GTDB chunk $db"
 done
+
 
 # Sort BAM files
 log_step "Sorting GTDB BAM files..."
@@ -191,17 +189,17 @@ cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "samtools merge -@ $THREADS -f $MIC
 check_success "Merging GTDB BAM files"
 
 
-if [ "$LCA_ASSIGN" = true ]; then 
-	
+if [ "$LCA_ASSIGN" = true ]; then
+
 	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp lca \
 	  --names '$TAX_PATH_BAC'/names.dmp \
 	  --nodes '$TAX_PATH_BAC'/nodes.dmp \
 	  --acc2tax '$TAX_PATH_BAC'/../hires-organelles-viruses-smags.acc2tax.gz \
 	  --sim_score_low 0.92 --sim_score_high 1.0 --how_many 15 --weight_type 0 \
 	  --fix_ncbi 0 --threads 10 \
-	  --bam $MICROB_OUT/{}.bam --out_prefix $MICROB_OUT/{}"
-	
-	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "zgrep -i -E 'Archaea|virus|bacteria' $MICROB_OUT/{}.lca.gz | cut -f1 > $MICROB_OUT/{}.bact_reads.txt" 
+	  --bam $MICROB_OUT/{}.gtdb.merged.bam --out_prefix $MICROB_OUT/{}"
+
+	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "zgrep -i -E 'Archaea|virus|bacteria' $MICROB_OUT/{}.lca.gz | cut -f1 > $MICROB_OUT/{}.bact_reads.txt"
 
 	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "seqtk subseq {}.ppm.vs.d4.fq.gz $MICROB_OUT/{}.bact_reads.txt | gzip > $MICROB_OUT/{}.bact_reads.fq.gz"
 
@@ -210,10 +208,10 @@ if [ "$LCA_ASSIGN" = true ]; then
 	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "comm -23 <(sort $MICROB_OUT/{}.all_reads.txt) <(sort $MICROB_OUT/{}.bact_reads.txt) > $EUK_OUT/{}.euk_reads.txt"
 
 	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "seqtk subseq {}.ppm.vs.d4.fq.gz $EUK_OUT/{}.euk_reads.txt | gzip > $EUK_OUT/{}.euk.fastq.gz"
-	
-else 
-	
-	parallel -j "$THREADSP" "getRTax --bam '$MICROB_OUT'/{}.bam -T $TAX_PATH_BAC/ -r '{\"domain\":[\"d__Bacteria\", \"d__Archaea\", \"d__Viruses\"]}' --threads 8 --unique --only-read-ids -p '$RESULT_PATH'/{}.bact_reads.txt" :::: "$SAMPLE_LIST"
+
+else
+
+	parallel -j "$THREADSP" "getRTax --bam $MICROB_OUT/{}.gtdb.merged.bam -T $TAX_PATH_BAC/taxid.map -r '{\"domain\":[\"d__Bacteria\", \"d__Archaea\", \"d__Viruses\"]}' --threads 8 --unique --only-read-ids -p '$MICROB_OUT'/{}.bact_reads.txt" :::: "$SAMPLE_LIST"
 
 	parallel -j "$THREADSP" "zcat $MICROB_OUT/{}.bact_reads.txt* > $MICROB_OUT/{}.bact_reads_all.txt" :::: "$SAMPLE_LIST"
 
@@ -227,16 +225,16 @@ else
 
 	parallel -j "$THREADSP" "comm -23 $MICROB_OUT/{}.all_reads.sorted.txt $MICROB_OUT/{}.bact_reads_all.sorted.txt > $EUK_OUT/{}.euk_reads.txt" :::: "$SAMPLE_LIST"
 
-	
+
 	parallel -j "$THREADSP" "seqtk subseq {}.ppm.vs.d4.fq.gz $EUK_OUT/{}.euk_reads.txt | gzip > $EUK_OUT/{}.euk.fastq.gz" :::: "$SAMPLE_LIST"
 
 
-fi 
-######### INTERLUDE FOR PREVIOUSLY MAPPED FILES #############################
-#Step X: Remove bacterial reads from BAM
-#parallel -j 4 "samtools view -h '$EUK_OUT'/{}.comp.reassign.filtered.bam | grep -v -F -f $RESULT_PATH/{}.bact_reads_all.txt | samtools view -@ 4 -b -o '$RESULT_PATH'/{}.no_bact.bam" :::: "$SAMPLE_LIST"
+fi
+######## INTERLUDE FOR PREVIOUSLY MAPPED FILES #############################
+Step X: Remove bacterial reads from BAM
+parallel -j 4 "samtools view -h '$EUK_OUT'/{}.comp.reassign.filtered.bam | grep -v -F -f $RESULT_PATH/{}.bact_reads_all.txt | samtools view -@ 4 -b -o '$RESULT_PATH'/{}.no_bact.bam" :::: "$SAMPLE_LIST"
 
-# ###################### MAPPING READS - PART 2##################################
+###################### MAPPING READS - PART 2##################################
 
 log_step "Mapping reads to eukaryote database \(129 parts\) with bowtie2..."
 for db in {1..129}; do
@@ -279,9 +277,15 @@ log_step "Mapping finished. Continuing with merging..."
 
 # Now compress the BAM files using metaDMG
 log_step "Compressing BAM files using metaDMG..."
-cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "for bam in $EUK_OUT/{}*.bam; do \
-  /projects/wintherpedersen/apps/metaDMG_14jun24/metaDMG-cpp/misc/compressbam --threads 12 --input \$bam --output $EUK_OUT/$(basename \$bam .bam).comp.bam; \
-done"
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
+  for bam in $EUK_OUT/{}*.bam; do
+    outname=\$(basename \"\$bam\" .bam).comp.bam
+    /projects/wintherpedersen/apps/metaDMG_14jun24/metaDMG-cpp/misc/compressbam \
+      --threads 12 \
+      --input \"\$bam\" \
+      --output \"$EUK_OUT/\$outname\"
+  done
+"
 check_success "Compressing BAM files"
 
 log_step "Sorting each BAM file before merging..."
