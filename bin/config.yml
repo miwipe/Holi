@@ -1,4 +1,5 @@
 # config.yml
+# config.yml
 
 LOG_FILE: "prefilering.log"
 
@@ -12,10 +13,8 @@ TAX_PATH_ACC: "/datasets/caeg_dataset/references/hires-organelles-viruses-smags/
 TAX_PATH_BAC: "/datasets/caeg_dataset/references/hires-organelles-viruses-smags/20240313/taxonomy/hires-organelles-viruses-smags/"
 
 ## adjustable thread counts and output directories 
-THREADS: 10 # number of threads for each tool to use (except filterBAM)
-THREADSP: 5 # number of parallalisations (except for filterBAM)
-MICROB_OUT: "/projects/caeg/people/bfj994/hashilan_marsh/microbial" #output path for the microbial mapping and analysis
-EUK_OUT: "/projects/caeg/people/bfj994/hashilan_marsh/out" # output for the eukaryotic mapping and analysis 
-
-RESULT_PATH: "/projects/caeg/people/bfj994/hashilan_marsh/new_pre" # final results 
-INPATH: "/projects/caeg/people/bfj994/hashilan_marsh" #Input path for the fastq files 
+THREADS: 10 
+THREADSP: 3 
+MICROB_OUT: "/projects/caeg/people/bfj994/hashilan_marsh/testingv2microbial"
+EUK_OUT: "/projects/caeg/people/bfj994/hashilan_marsh/testingv2eukaryotic"
+RESULT_PATH: "/projects/caeg/people/bfj994/hashilan_marsh/testingv2res"
