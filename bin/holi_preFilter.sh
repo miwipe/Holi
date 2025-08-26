@@ -310,7 +310,7 @@ check_success "Sorting BAM file"
 if [ "$UNICORN" = true ]; then
     
     log_step "Running unicorn reassign..."
-    cat "$SAMPLE_LIST" | parallel -j 3 " /projects/wintherpedersen/apps/unicorn/unicorn reassign -b $EUK_OUT/{}.sort.comp.bam -o $EUK_OUT/{}.comp.reassign.bam -t $THREADS &> $EUK_OUT/{}.comp.reassign.unicorn.log.txt"
+    cat "$SAMPLE_LIST" | parallel -j 3 " /projects/wintherpedersen/apps/unicorn/unicorn reassign -b $EUK_OUT/{}.comp.bam -o $EUK_OUT/{}.comp.reassign.bam -t $THREADS &> $EUK_OUT/{}.comp.reassign.unicorn.log.txt"
     check_success "Unicorn reassign"
 
     log_step "Running unicorn filter..."
