@@ -296,7 +296,7 @@ done"
 check_success "Bam files sorted"
 
 log_step "Merging all sorted BAM files..."
-cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "samtools merge -@ $THREADS -n -f $EUK_OUT/{}.comp.sam.gz $EUK_OUT/{}*.sorted.bam"
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "samtools merge -@ $THREADS -n -f $EUK_OUT/{}.comp.sam.gz $EUK_OUT/{}*.comp.bam.sorted.bam"
 check_success "Merging BAM files to sam.gz"
 
 log_step "Compress bam..."
