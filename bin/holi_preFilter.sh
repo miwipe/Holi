@@ -191,13 +191,17 @@ check_success "Merging GTDB BAM files"
 
 if [ "$LCA_ASSIGN" = true ]; then
 
+	log_step "Sorting merged BAM file for metaDMG..."
+	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "samtools sort -n -@ $THREADS -m 10G -o $MICROB_OUT/{}.gtdb.merged.sorted.bam" "$$MICROB_OUT/{}.gtdb.merged.bam"
+	check_success "Sorting BAM file"
+
 	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp lca \
 	  --names '$TAX_PATH_BAC'/names.dmp \
 	  --nodes '$TAX_PATH_BAC'/nodes.dmp \
 	  --acc2tax '$TAX_PATH_BAC'/../hires-organelles-viruses-smags.acc2tax.gz \
 	  --sim_score_low 0.92 --sim_score_high 1.0 --how_many 15 --weight_type 0 \
 	  --fix_ncbi 0 --threads 10 \
-	  --bam $MICROB_OUT/{}.gtdb.merged.bam --out_prefix $MICROB_OUT/{}"
+	  --bam $MICROB_OUT/{}.gtdb.merged.sorted.bam --out_prefix $MICROB_OUT/{}"
 
 	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "zgrep -i -E 'Archaea|virus|bacteria' $MICROB_OUT/{}.lca.gz | cut -f1 > $MICROB_OUT/{}.bact_reads.txt"
 
