@@ -192,7 +192,7 @@ check_success "Merging GTDB BAM files"
 if [ "$LCA_ASSIGN" = true ]; then
 
 	log_step "Sorting merged BAM file for metaDMG..."
-	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "samtools sort -n -@ $THREADS -m 10G -o $MICROB_OUT/{}.gtdb.merged.sorted.bam" "$$MICROB_OUT/{}.gtdb.merged.bam"
+	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "samtools sort -n -@ $THREADS -m 10G -o $MICROB_OUT/{}.gtdb.merged.sorted.bam" "$MICROB_OUT/{}.gtdb.merged.bam"
 	check_success "Sorting BAM file"
 
 	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp lca \
