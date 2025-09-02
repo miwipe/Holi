@@ -207,7 +207,7 @@ if [ "$LCA_ASSIGN" = true ]; then
 
 	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "seqtk subseq {}.ppm.vs.d4.fq.gz $MICROB_OUT/{}.bact_reads.txt | gzip > $MICROB_OUT/{}.bact_reads.fq.gz"
 
-	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "zcat {}.ppm.vs.d4.fq.gz | awk 'NR%4==1 {print substr($0, 2)}' > $MICROB_OUT/{}.all_reads.txt"
+	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "zcat {}.ppm.vs.d4.fq.gz | awk 'NR%4==1 {print substr(\$0, 2)}' > $MICROB_OUT/{}.all_reads.txt"
 
 	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "comm -23 <(sort $MICROB_OUT/{}.all_reads.txt) <(sort $MICROB_OUT/{}.bact_reads.txt) > $EUK_OUT/{}.euk_reads.txt"
 
@@ -235,8 +235,8 @@ else
 
 fi
 ######## INTERLUDE FOR PREVIOUSLY MAPPED FILES #############################
-Step X: Remove bacterial reads from BAM
-parallel -j 4 "samtools view -h '$EUK_OUT'/{}.comp.reassign.filtered.bam | grep -v -F -f $RESULT_PATH/{}.bact_reads_all.txt | samtools view -@ 4 -b -o '$RESULT_PATH'/{}.no_bact.bam" :::: "$SAMPLE_LIST"
+#Step X: Remove bacterial reads from BAM
+#parallel -j 4 "samtools view -h '$EUK_OUT'/{}.comp.reassign.filtered.bam | grep -v -F -f $RESULT_PATH/{}.bact_reads_all.txt | samtools view -@ 4 -b -o '$RESULT_PATH'/{}.no_bact.bam" :::: "$SAMPLE_LIST"
 
 ###################### MAPPING READS - PART 2##################################
 
