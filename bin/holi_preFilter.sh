@@ -363,7 +363,7 @@ log_step "Running taxonomic classification with metaDMG..."
 cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp lca \
   --names $TAX_PATH_NCBI/taxdump/names.dmp \
   --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
-  --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz) \
+  --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz /datasets/caeg_dataset/references/phylo_norway/phylo_norway.acc2taxid.gz) \
   --sim_score_low 0.95 --sim_score_high 1.0 --how_many 15 --weight_type 0 \
   --fix_ncbi 0 --threads 10 --filtered_acc2tax $EUK_OUT/{}.acc2tax \
   --bam $EUK_OUT/{}.sort.comp.reassign.filtered.bam --out_prefix $EUK_OUT/{}.sort.comp.reassign.filtered"
@@ -394,7 +394,7 @@ cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/uni
   --outstat $EUK_OUT/{}.comp.reassign.filtered.unicorn.tidstats \
   --names $TAX_PATH_NCBI/taxdump/names.dmp \
   --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
-  --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz)"
+  --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz /datasets/caeg_dataset/references/phylo_norway/phylo_norway.acc2taxid.gz)"
 
 check_success "Unicorn refstats final filtering" 
 
