@@ -162,9 +162,9 @@ else
 fi
 
 
--------------------------------
-Step 1: Mapping against GTDB (7 chunks)
--------------------------------
+#-------------------------------
+#Step 1: Mapping against GTDB (7 chunks)
+#-------------------------------
 log_step "Starting mapping and taxonomic classification against GTDB..."
 
 # Map against each of the 7 GTDB chunks
