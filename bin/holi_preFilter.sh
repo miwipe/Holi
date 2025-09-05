@@ -278,11 +278,13 @@ log_step "Mapping finished. Continuing with merging..."
 
 ########################## ANALYSIS ######################################
 
-# Now compress the BAM files using metaDMG
+# --- Compress BAM files using metaDMG ---
 log_step "Compressing BAM files using metaDMG..."
 
-cat "$SAMPLE_LIST" | parallel -j "$THREADSP" '
-  sample={}
+export EUK_OUT THREADS THREADSP
+
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" --env EUK_OUT '
+  sample={};
   for bam in $(find "$EUK_OUT" -type f -name "${sample}*.bam" \
     | grep -E "${sample}\.(euk|mito|pla|phyNor|core_nt)(\.[0-9]+)?\.bam$" \
     | grep -vE "sorted|comp|merged"); do
@@ -298,15 +300,15 @@ cat "$SAMPLE_LIST" | parallel -j "$THREADSP" '
 check_success "Compressing BAM files"
 
 
+# --- Sort compressed BAM files ---
 log_step "Sorting each BAM file before merging..."
 
-cat "$SAMPLE_LIST" | parallel -j "$THREADSP" '
-  sample={}
-  for bam in $(find "$EUK_OUT" -type f -name "${sample}*.bam" \
-    | grep -E "${sample}\.(euk|mito|pla|phyNor|core_nt)(\.[0-9]+)?\.bam$" \
-    | grep -vE "sorted|comp|merged"); do
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" --env EUK_OUT --env THREADS '
+  sample={};
+  for bam in $(find "$EUK_OUT" -type f -name "${sample}*.comp.bam"); do
 
-    sorted_bam="$EUK_OUT/$(basename "$bam" .bam).sorted.bam"
+    outname=$(basename "$bam" .bam).sorted.bam
+    sorted_bam="$EUK_OUT/$outname"
     samtools sort -n -@ "$THREADS" -m 4G -o "$sorted_bam" "$bam"
   done
 '
