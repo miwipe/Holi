@@ -162,15 +162,14 @@ else
 fi
 
 
-# -------------------------------
-# Step 1: Mapping against GTDB (7 chunks)
-# -------------------------------
+-------------------------------
+Step 1: Mapping against GTDB (7 chunks)
+-------------------------------
 log_step "Starting mapping and taxonomic classification against GTDB..."
 
-Map against each of the 7 GTDB chunks
+# Map against each of the 7 GTDB chunks
 for db in {1..7}; do
-    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "bowtie2 --threads $THREADS -x $DB_PATH_bac.$db.fas.gz -U {}.ppm.vs.d4.fq.gz -k 1000 -D 15 -R 2 -N 1 -L 22 -i S,1,1.15 --np 1 --mp '1,1' --rdg '0,1' --rfg '0,1' --score-min 'L,0,-0.1' --mm --no-unal \
-		 | samtools view -bS - > $MICROB_OUT/{}.gtdb.$db.bam 2> $MICROB_OUT/{}.gtdb.$db.log.txt"
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "bowtie2 --threads $THREADS -x $DB_PATH_bac.$db.fas.gz -U {}.ppm.vs.d4.fq.gz -k 1000 -D 15 -R 2 -N 1 -L 22 -i S,1,1.15 --np 1 --mp '1,1' --rdg '0,1' --rfg '0,1' --score-min 'L,0,-0.1' --mm --no-unal | samtools view -bS - > $MICROB_OUT/{}.gtdb.$db.bam 2> $MICROB_OUT/{}.gtdb.$db.log.txt"
     check_success "Mapping to GTDB chunk $db"
 done
 
@@ -190,7 +189,7 @@ check_success "Merging GTDB BAM files"
 
 
 if [ "$LCA_ASSIGN" = true ]; then
-
+	
 	log_step "Sorting merged BAM file for metaDMG..."
 	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "samtools sort -n -@ $THREADS -m 10G -o $MICROB_OUT/{}.gtdb.merged.sorted.bam" "$MICROB_OUT/{}.gtdb.merged.bam"
 	check_success "Sorting BAM file"
@@ -234,8 +233,8 @@ else
 
 
 fi
-######## INTERLUDE FOR PREVIOUSLY MAPPED FILES #############################
-#Step X: Remove bacterial reads from BAM
+####### INTERLUDE FOR PREVIOUSLY MAPPED FILES #############################
+##Step X: Remove bacterial reads from BAM
 #parallel -j 4 "samtools view -h '$EUK_OUT'/{}.comp.reassign.filtered.bam | grep -v -F -f $RESULT_PATH/{}.bact_reads_all.txt | samtools view -@ 4 -b -o '$RESULT_PATH'/{}.no_bact.bam" :::: "$SAMPLE_LIST"
 
 ###################### MAPPING READS - PART 2##################################
@@ -281,26 +280,42 @@ log_step "Mapping finished. Continuing with merging..."
 
 # Now compress the BAM files using metaDMG
 log_step "Compressing BAM files using metaDMG..."
-cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "
-  for bam in $EUK_OUT/{}*.bam; do
-    outname=\$(basename \"\$bam\" .bam).comp.bam
+
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" '
+  sample={}
+  for bam in $(find "$EUK_OUT" -type f -name "${sample}*.bam" \
+    | grep -E "${sample}\.(euk|mito|pla|phyNor|core_nt)(\.[0-9]+)?\.bam$" \
+    | grep -vE "sorted|comp|merged"); do
+
+    outname=$(basename "$bam" .bam).comp.bam
     /projects/wintherpedersen/apps/metaDMG_14jun24/metaDMG-cpp/misc/compressbam \
       --threads 12 \
-      --input \"\$bam\" \
-      --output \"$EUK_OUT/\$outname\"
+      --input "$bam" \
+      --output "$EUK_OUT/$outname"
   done
-"
+'
+
 check_success "Compressing BAM files"
 
+
 log_step "Sorting each BAM file before merging..."
-cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "for bam in $EUK_OUT/{}*.bam; do \
-  sorted_bam=\$MICROB_OUT/$(basename \$bam .bam).sorted.bam; \
-  samtools sort -n -@ $THREADS -m 4G -o \$sorted_bam \$bam; \
-done"
+
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" '
+  sample={}
+  for bam in $(find "$EUK_OUT" -type f -name "${sample}*.bam" \
+    | grep -E "${sample}\.(euk|mito|pla|phyNor|core_nt)(\.[0-9]+)?\.bam$" \
+    | grep -vE "sorted|comp|merged"); do
+
+    sorted_bam="$EUK_OUT/$(basename "$bam" .bam).sorted.bam"
+    samtools sort -n -@ "$THREADS" -m 4G -o "$sorted_bam" "$bam"
+  done
+'
+
 check_success "Bam files sorted"
 
+
 log_step "Merging all sorted BAM files..."
-cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "samtools merge -@ $THREADS -n -f $EUK_OUT/{}.comp.sam.gz $EUK_OUT/{}*.comp.bam.sorted.bam"
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "samtools merge -@ $THREADS -n -f $EUK_OUT/{}.comp.sam.gz $EUK_OUT/{}*.comp.sorted.bam"
 check_success "Merging BAM files to sam.gz"
 
 log_step "Compress bam..."
@@ -313,88 +328,88 @@ check_success "Sorting BAM file"
 
 if [ "$UNICORN" = true ]; then
     
-    log_step "Running unicorn reassign..."
-    cat "$SAMPLE_LIST" | parallel -j 3 " /projects/wintherpedersen/apps/unicorn/unicorn reassign -b $EUK_OUT/{}.comp.bam -o $EUK_OUT/{}.comp.reassign.bam -t $THREADS &> $EUK_OUT/{}.comp.reassign.unicorn.log.txt"
-    check_success "Unicorn reassign"
+    # log_step "Running unicorn reassign..."
+#     cat "$SAMPLE_LIST" | parallel -j 3 " /projects/wintherpedersen/apps/unicorn/unicorn reassign -b $EUK_OUT/{}.comp.bam -o $EUK_OUT/{}.comp.reassign.bam -t $THREADS &> $EUK_OUT/{}.comp.reassign.unicorn.log.txt"
+#     check_success "Unicorn reassign"
 
     log_step "Running unicorn filter..."
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/unicorn/unicorn refstats \
-      -b $EUK_OUT/{}.comp.reassign.bam \
-      -t $THREADS --outbam $EUK_OUT/{}.comp.reassign.filtered.bam \
-	  --outstat $EUK_OUT/{}.comp.reassign.filtered.unicorn.refstats \
+      -b $EUK_OUT/{}.comp.bam \
+      -t $THREADS --outbam $EUK_OUT/{}.comp.filtered.bam \
+	  --outstat $EUK_OUT/{}.comp.filtered.unicorn.refstats \
 	  --names $TAX_PATH_NCBI/taxdump/names.dmp \
 	  --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp"
 	
     check_success "Unicorn refstats final filtering"
 	
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/unicorn/unicorn bamstats \
-      -b $EUK_OUT/{}.comp.reassign.unicorn.bam \
-      -t $THREADS --outbam $EUK_OUT/{}.comp.reassign.filtered.bam \
-	  --outstat $EUK_OUT/{}.comp.reassign.filtered.unicorn.bamstats \
-	  --printdists $EUK_OUT/{}.comp.reassign.filtered.unicorn "
+      -b $EUK_OUT/{}.comp.unicorn.bam \
+      -t $THREADS --outbam $EUK_OUT/{}.comp.filtered.bam \
+	  --outstat $EUK_OUT/{}.comp.filtered.unicorn.bamstats \
+	  --printdists $EUK_OUT/{}.comp.filtered.unicorn "
 	
     check_success "Unicorn bamstats final filtering"
 
 else
     
-    log_step "Reassign BAM files with filterBAM..."
-    cat "$SAMPLE_LIST" | parallel -j 1 "filterBAM reassign \
-      --bam $EUK_OUT/{}.sort.comp.bam -t 4 -i 0 -A 92 -M 30G -m 5G -n 10 -s 0.0 \
-      --squarem-min-improvement 0.001 --squarem-max-step-factor 2.0 \
-      -o $EUK_OUT/{}.comp.reassign.bam &> $EUK_OUT/{}.comp.reassign.log.txt"
-    check_success "filterBAM reassign"
+    # log_step "Reassign BAM files with filterBAM..."
+    # cat "$SAMPLE_LIST" | parallel -j 1 "filterBAM reassign \
+    #   --bam $EUK_OUT/{}.sort.comp.bam -t 4 -i 0 -A 92 -M 30G -m 5G -n 10 -s 0.0 \
+    #   --squarem-min-improvement 0.001 --squarem-max-step-factor 2.0 \
+    #   -o $EUK_OUT/{}.comp.reassign.bam &> $EUK_OUT/{}.comp.reassign.log.txt"
+    # check_success "filterBAM reassign"
 
     log_step "Final filtering with filterBAM..."
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "filterBAM filter \
       -e 0.6 -m 8G -t 12 -n 10 -A 92 -a 95 -N \
       --bam $EUK_OUT/{}.comp.reassign.bam \
       --stats $EUK_OUT/{}.comp.reassign.stats.tsv.gz \
-      --stats-filtered $EUK_OUT/{}.comp.reassign.stats-filtered.tsv.gz \
-      --bam-filtered $EUK_OUT/{}.comp.reassign.filtered.bam"
+      --stats-filtered $EUK_OUT/{}.comp.stats-filtered.tsv.gz \
+      --bam-filtered $EUK_OUT/{}.comp.filtered.bam"
     check_success "Final filtering"
 fi
 
 
 log_step "Sorting merged BAM file for metaDMG..."
-cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "samtools sort -n -@ $THREADS -m 10G -o $EUK_OUT/{}.sort.comp.reassign.filtered.bam" "$EUK_OUT/{}.comp.reassign.filtered.bam"
+cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "samtools sort -n -@ $THREADS -m 10G -o $EUK_OUT/{}.sort.comp.filtered.bam" "$EUK_OUT/{}.comp.filtered.bam"
 check_success "Sorting BAM file"
 
 log_step "Running taxonomic classification with metaDMG..."
 cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp lca \
   --names $TAX_PATH_NCBI/taxdump/names.dmp \
   --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
-  --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz /datasets/caeg_dataset/references/phylo_norway/phylo_norway.acc2taxid.gz) \
+  --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz) \
   --sim_score_low 0.95 --sim_score_high 1.0 --how_many 15 --weight_type 0 \
   --fix_ncbi 0 --threads 10 --filtered_acc2tax $EUK_OUT/{}.acc2tax \
-  --bam $EUK_OUT/{}.sort.comp.reassign.filtered.bam --out_prefix $EUK_OUT/{}.sort.comp.reassign.filtered"
+  --bam $EUK_OUT/{}.sort.comp.filtered.bam --out_prefix $EUK_OUT/{}.sort.comp.filtered"
 check_success "Taxonomic classification"
 
 log_step "Running damage estimation with metaDMG..."
 cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp dfit \
-	  $EUK_OUT/{}.sort.comp.reassign.filtered.bdamage.gz --threads 6 \
+	  $EUK_OUT/{}.sort.comp.filtered.bdamage.gz --threads 6 \
 	  --names $TAX_PATH_NCBI/taxdump/names.dmp \
 	  --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
       --showfits 2 --nopt 10 \
       --nbootstrap 20 --doboot 1 --seed 1234 --lib ds \
-      --out_prefix $EUK_OUT/{}.sort.comp.reassign.filtered"
+      --out_prefix $EUK_OUT/{}.sort.comp.filtered"
 check_success "Damage calculations done"
 
 log_step "Aggregating lca and dfit metaDMG..."
 cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp aggregate \
-	  $EUK_OUT/{}.sort.comp.reassign.filtered.bdamage.gz \
+	  $EUK_OUT/{}.sort.comp.filtered.bdamage.gz \
 	 --names $TAX_PATH_NCBI/taxdump/names.dmp \
       --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
-      --lcastat $EUK_OUT/{}.sort.comp.reassign.filtered.stat.gz --dfit $EUK_OUT/{}.sort.comp.reassign.filtered.dfit.gz --out_prefix $EUK_OUT/{}.sort.comp.reassign.filtered.agg"
+      --lcastat $EUK_OUT/{}.sort.comp.filtered.stat.gz --dfit $EUK_OUT/{}.sort.comp.filtered.dfit.gz --out_prefix $EUK_OUT/{}.sort.comp.filtered.agg"
 check_success "Aggregation done."
 
 log_step "Unicorn per taxID statistics..."
 cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/unicorn/unicorn tidstats \
-  -b $EUK_OUT/{}.sort.comp.reassign.filtered.bam\
+  -b $EUK_OUT/{}.sort.comp.filtered.bam\
   -t $THREADS \
-  --outstat $EUK_OUT/{}.comp.reassign.filtered.unicorn.tidstats \
+  --outstat $EUK_OUT/{}.comp.filtered.unicorn.tidstats \
   --names $TAX_PATH_NCBI/taxdump/names.dmp \
   --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
-  --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz /datasets/caeg_dataset/references/phylo_norway/phylo_norway.acc2taxid.gz)"
+  --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz)"
 
 check_success "Unicorn refstats final filtering" 
 
