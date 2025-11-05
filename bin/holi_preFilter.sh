@@ -381,7 +381,7 @@ cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/met
   --names $TAX_PATH_NCBI/taxdump/names.dmp \
   --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
   --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz) \
-  --sim_score_low 0.95 --sim_score_high 1.0 --how_many 15 --weight_type 0 \
+  --sim_score_low 0.95 --sim_score_high 1.0 --how_many 15 --weight_type 1 \
   --fix_ncbi 0 --threads 10 --filtered_acc2tax $EUK_OUT/{}.acc2tax \
   --bam $EUK_OUT/{}.sort.comp.filtered.bam --out_prefix $EUK_OUT/{}.sort.comp.filtered"
 check_success "Taxonomic classification"
