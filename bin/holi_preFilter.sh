@@ -1,5 +1,4 @@
 #!/bin/bash
-
 # Script: Holi.sh
 # Description: Comprehensive automated pipeline for preprocessing, mapping, filtering, and taxonomic classification of FASTQ files.
 # Requirements: GNU Parallel, fastp, vsearch, sga, bowtie2, samtools, filterBAM, conda, seqtk, getRtax
@@ -32,6 +31,46 @@ fi
 module load samtools/1.21
 module load seqtk/1.4
 module load bowtie2/2.4.2 
+
+# -------------------------------
+# Check for required tools
+# -------------------------------
+
+REQUIRED_TOOLS=(
+  parallel
+  fastp
+  vsearch
+  sga
+  bowtie2
+  samtools
+  filterBAM
+  conda
+  seqtk
+  getRtax
+)
+
+echo "Checking required tools..."
+
+missing_tools=()
+
+for tool in "${REQUIRED_TOOLS[@]}"; do
+  if ! command -v "$tool" &> /dev/null; then
+    missing_tools+=("$tool")
+  fi
+done
+
+if [ ${#missing_tools[@]} -ne 0 ]; then
+  echo "The following required tools are missing:"
+  for t in "${missing_tools[@]}"; do
+    echo "  - $t"
+  done
+  echo "Please install them and re-run the script."
+  exit 1
+else
+  echo "All required tools found."
+fi
+
+
 
 # -------------------------------
 # Load config file 
@@ -162,14 +201,14 @@ else
 fi
 
 
-#-------------------------------
-#Step 1: Mapping against GTDB (7 chunks)
-#-------------------------------
+# -------------------------------
+# Step 1: Mapping against GTDB (7 chunks)
+# -------------------------------
 log_step "Starting mapping and taxonomic classification against GTDB..."
 
 # Map against each of the 7 GTDB chunks
 for db in {1..7}; do
-    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "bowtie2 --threads $THREADS -x $DB_PATH_bac.$db.fas.gz -U {}.ppm.vs.d4.fq.gz -k 1000 -D 15 -R 2 -N 1 -L 22 -i S,1,1.15 --np 1 --mp '1,1' --rdg '0,1' --rfg '0,1' --score-min 'L,0,-0.1' --mm --no-unal | samtools view -bS - > $MICROB_OUT/{}.gtdb.$db.bam 2> $MICROB_OUT/{}.gtdb.$db.log.txt"
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "bowtie2 --threads $THREADS -x $DB_PATH_bac.$db.fas.gz -U {}.ppm.vs.d4.fq.gz -k 1000 -D 15 -R 2 -N 1 -L 22 -i S,1,1.15 --np 1 --mp '1,1' --rdg '0,1' --rfg '0,1' --score-min 'L,0,-0.1' --mm --no-unal | samtools view -bS - > $MICROB_OUT/{}.gtdb.$db.bam -T$MICROB_OUT/ 2> $MICROB_OUT/{}.gtdb.$db.log.txt"
     check_success "Mapping to GTDB chunk $db"
 done
 
@@ -189,7 +228,7 @@ check_success "Merging GTDB BAM files"
 
 
 if [ "$LCA_ASSIGN" = true ]; then
-	
+
 	log_step "Sorting merged BAM file for metaDMG..."
 	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "samtools sort -n -@ $THREADS -m 10G -o $MICROB_OUT/{}.gtdb.merged.sorted.bam" "$MICROB_OUT/{}.gtdb.merged.bam"
 	check_success "Sorting BAM file"
@@ -234,10 +273,10 @@ else
 
 fi
 ####### INTERLUDE FOR PREVIOUSLY MAPPED FILES #############################
-##Step X: Remove bacterial reads from BAM
+#Step X: Remove bacterial reads from BAM
 #parallel -j 4 "samtools view -h '$EUK_OUT'/{}.comp.reassign.filtered.bam | grep -v -F -f $RESULT_PATH/{}.bact_reads_all.txt | samtools view -@ 4 -b -o '$RESULT_PATH'/{}.no_bact.bam" :::: "$SAMPLE_LIST"
 
-###################### MAPPING READS - PART 2##################################
+##################### MAPPING READS - PART 2##################################
 
 log_step "Mapping reads to eukaryote database \(129 parts\) with bowtie2..."
 for db in {1..129}; do
@@ -276,7 +315,7 @@ check_success "Mapping to plastid database"
 
 log_step "Mapping finished. Continuing with merging..."
 
-########################## ANALYSIS ######################################
+######################## ANALYSIS ######################################
 
 # --- Compress BAM files using metaDMG ---
 log_step "Compressing BAM files using metaDMG..."
@@ -315,7 +354,6 @@ cat "$SAMPLE_LIST" | parallel -j "$THREADSP" --env EUK_OUT --env THREADS '
 
 check_success "Bam files sorted"
 
-
 log_step "Merging all sorted BAM files..."
 cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "samtools merge -@ $THREADS -n -f $EUK_OUT/{}.comp.sam.gz $EUK_OUT/{}*.comp.sorted.bam"
 check_success "Merging BAM files to sam.gz"
@@ -324,9 +362,6 @@ log_step "Compress bam..."
 cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/metaDMG_14jun24/metaDMG-cpp/misc/compressbam --threads 12 --input $EUK_OUT/{}.comp.sam.gz --output $EUK_OUT/{}.comp.bam"
 check_success "merged sam.gz files with compress bam"
 
-log_step "Sorting merged BAM file for bamfilter..."
-cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "samtools sort -@ $THREADS -m 10G -o $EUK_OUT/{}.sort.comp.bam" "$EUK_OUT/{}.comp.bam"
-check_success "Sorting BAM file"
 
 if [ "$UNICORN" = true ]; then
     
@@ -353,19 +388,23 @@ if [ "$UNICORN" = true ]; then
     check_success "Unicorn bamstats final filtering"
 
 else
+	
+	log_step "Sorting merged BAM file for bamfilter..."
+	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "samtools sort -@ $THREADS -m 10G -o $EUK_OUT/{}.sort.comp.bam" "$EUK_OUT/{}.comp.bam"
+	check_success "Sorting BAM file"
     
     # log_step "Reassign BAM files with filterBAM..."
-    # cat "$SAMPLE_LIST" | parallel -j 1 "filterBAM reassign \
-    #   --bam $EUK_OUT/{}.sort.comp.bam -t 4 -i 0 -A 92 -M 30G -m 5G -n 10 -s 0.0 \
-    #   --squarem-min-improvement 0.001 --squarem-max-step-factor 2.0 \
-    #   -o $EUK_OUT/{}.comp.reassign.bam &> $EUK_OUT/{}.comp.reassign.log.txt"
-    # check_success "filterBAM reassign"
+#     cat "$SAMPLE_LIST" | parallel -j 1 "filterBAM reassign \
+#       --bam $EUK_OUT/{}.sort.comp.bam -t 4 -i 0 -A 92 -M 30G -m 5G -n 10 -s 0.0 \
+#       --squarem-min-improvement 0.001 --squarem-max-step-factor 2.0 \
+#       -o $EUK_OUT/{}.comp.reassign.bam &> $EUK_OUT/{}.comp.reassign.log.txt"
+#     check_success "filterBAM reassign"
 
     log_step "Final filtering with filterBAM..."
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "filterBAM filter \
       -e 0.6 -m 8G -t 12 -n 10 -A 92 -a 95 -N \
-      --bam $EUK_OUT/{}.comp.reassign.bam \
-      --stats $EUK_OUT/{}.comp.reassign.stats.tsv.gz \
+      --bam $EUK_OUT/{}.sort.comp.bam \
+      --stats $EUK_OUT/{}.comp.stats.tsv.gz \
       --stats-filtered $EUK_OUT/{}.comp.stats-filtered.tsv.gz \
       --bam-filtered $EUK_OUT/{}.comp.filtered.bam"
     check_success "Final filtering"
