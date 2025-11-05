@@ -198,7 +198,7 @@ if [ "$LCA_ASSIGN" = true ]; then
 	  --names '$TAX_PATH_BAC'/names.dmp \
 	  --nodes '$TAX_PATH_BAC'/nodes.dmp \
 	  --acc2tax '$TAX_PATH_BAC_ACC'/hires-organelles-viruses-smags.acc2taxid.gz \
-	  --sim_score_low 0.92 --sim_score_high 1.0 --how_many 15 --weight_type 0 \
+	  --sim_score_low 0.92 --sim_score_high 1.0 --how_many 15 --weight_type 1 \
 	  --fix_ncbi 0 --threads 10 \
 	  --bam $MICROB_OUT/{}.gtdb.merged.sorted.bam --out_prefix $MICROB_OUT/{}"
 
