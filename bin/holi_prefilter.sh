@@ -43,10 +43,8 @@ REQUIRED_TOOLS=(
   sga
   bowtie2
   samtools
-  filterBAM
   conda
   seqtk
-  getRtax
 )
 
 echo "Checking required tools..."
