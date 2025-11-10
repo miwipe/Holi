@@ -445,7 +445,7 @@ log_step "Unicorn per taxID statistics..."
 cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "/projects/wintherpedersen/apps/unicorn/unicorn tidstats \
   -b $EUK_OUT/{}.sort.comp.filtered.bam\
   -t $THREADS \
-  --outstat $EUK_OUT/{}.comp.filtered.unicorn.tidstats \
+  -o $EUK_OUT/{}.comp.filtered.unicorn.tidstats \
   --names $TAX_PATH_NCBI/taxdump/names.dmp \
   --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
   --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz)"
