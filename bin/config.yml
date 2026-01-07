@@ -1,7 +1,6 @@
 # config.yml
-# config.yml
 
-LOG_FILE: "prefilering.log"
+LOG_FILE: "ice_cores.log"
 
 ## Database paths 
 DB_PATH: "/datasets/caeg_dataset/references/ncbi/20250530/data/wgs_eukaryota"
@@ -9,12 +8,14 @@ DB_PATH_clean: "/datasets/caeg_dataset/references/ncbi/20250530/data/"
 TAX_PATH_NCBI: "/datasets/caeg_dataset/references/ncbi/20250530/taxonomy/ncbi/"
 DB_PATH_Norwary: "/datasets/caeg_dataset/references/phylo_norway/20250127/results/shard"
 DB_PATH_bac: "/datasets/caeg_dataset/references/hires-organelles-viruses-smags/20240313/hires-organelles-viruses-smags"
-TAX_PATH_ACC: "/datasets/caeg_dataset/references/hires-organelles-viruses-smags/20240313/taxonomy/"
+TAX_PATH_BAC_ACC: "/datasets/caeg_dataset/references/hires-organelles-viruses-smags/20240313/taxonomy/"
 TAX_PATH_BAC: "/datasets/caeg_dataset/references/hires-organelles-viruses-smags/20240313/taxonomy/hires-organelles-viruses-smags/"
 
 ## adjustable thread counts and output directories 
 THREADS: 10 
-THREADSP: 3 
-MICROB_OUT: "/projects/caeg/people/bfj994/hashilan_marsh/testingv2microbial"
-EUK_OUT: "/projects/caeg/people/bfj994/hashilan_marsh/testingv2eukaryotic"
-RESULT_PATH: "/projects/caeg/people/bfj994/hashilan_marsh/testingv2res"
+THREADSP: 5 
+MICROB_OUT: "/projects/caeg/people/bfj994/CC_ice_core/microbial"
+EUK_OUT: "/projects/caeg/people/bfj994/CC_ice_core/eukaryotic"
+INPATH: "/projects/caeg/scratch/for_nicola/ice_core_raw_data"
+RESULT_PATH: "/projects/caeg/people/bfj994/CC_ice_core/res"
+LOGS: "/projects/caeg/people/bfj994/CC_ice_core/logs"
