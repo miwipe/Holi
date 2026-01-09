@@ -1,4 +1,4 @@
-name: holi2
+name: holi
 channels:
   - bioconda
   - conda-forge
