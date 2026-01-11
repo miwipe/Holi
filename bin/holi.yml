@@ -1,140 +1,82 @@
 name: holi
 channels:
-  - bioconda
   - conda-forge
-  - https://repo.anaconda.com/pkgs/main
-  - https://repo.anaconda.com/pkgs/r
+  - bioconda
+  - nodefaults
+
 dependencies:
-  - _libgcc_mutex=0.1=conda_forge
-  - _openmp_mutex=4.5=2_gnu
-  - argcomplete=3.6.2=pyhd8ed1ab_0
-  - bamtools=2.5.2=h077b44d_6
-  - binutils=2.43=h4852527_2
-  - binutils_impl_linux-64=2.43=h4bf12b8_2
-  - binutils_linux-64=2.43=h4852527_2
-  - bowtie2=2.5.4=he96a11b_5
-  - bzip2=1.0.8=h4bc722e_7
-  - c-ares=1.34.4=hb9d3cd8_0
-  - c-compiler=1.9.0=h2b85faf_0
-  - ca-certificates=2025.4.26=hbd8a1cb_0
-  - compilers=1.9.0=ha770c72_0
-  - cxx-compiler=1.9.0=h1a2810e_0
-  - fastani=1.34=hb66fcc3_5
-  - fastp=0.24.0=heae3180_1
-  - fortran-compiler=1.9.0=h36df796_0
-  - gcc=13.3.0=h9576a4e_1
-  - gcc_impl_linux-64=13.3.0=hfea6d02_1
-  - gcc_linux-64=13.3.0=hc28eda2_7
-  - gfortran=13.3.0=h9576a4e_1
-  - gfortran_impl_linux-64=13.3.0=h10434e7_1
-  - gfortran_linux-64=13.3.0=hb919d3a_7
-  - gsl=2.7=he838d99_0
-  - gxx=13.3.0=h9576a4e_1
-  - gxx_impl_linux-64=13.3.0=hdbfa832_1
-  - gxx_linux-64=13.3.0=h6834431_7
-  - htslib=1.21=h566b1c6_1
-  - isa-l=2.31.1=hb9d3cd8_1
-  - jq=1.7.1=hd590300_0
-  - kernel-headers_linux-64=3.10.0=he073ed8_18
-  - keyutils=1.6.1=h166bdaf_0
-  - krb5=1.21.3=h659f571_0
-  - ld_impl_linux-64=2.43=h712a8e2_2
-  - libblas=3.9.0=31_h59b9bed_openblas
-  - libcblas=3.9.0=31_he106b2a_openblas
-  - libcurl=8.11.1=h332b0f4_0
-  - libdeflate=1.23=h4ddbbb0_0
-  - libedit=3.1.20240808=pl5321h7949ede_0
-  - libev=4.33=hd590300_2
-  - libffi=3.4.2=h7f98852_5
-  - libgcc=14.2.0=h77fa898_1
-  - libgcc-devel_linux-64=13.3.0=h84ea5a7_101
-  - libgcc-ng=14.2.0=h69a702a_1
-  - libgfortran=14.2.0=h69a702a_1
-  - libgfortran5=14.2.0=hd5240d6_1
-  - libgomp=14.2.0=h77fa898_1
-  - liblzma=5.6.3=hb9d3cd8_1
-  - libnghttp2=1.64.0=h161d5f1_0
-  - libnsl=2.0.1=hd590300_0
-  - libopenblas=0.3.29=pthreads_h94d23a6_0
-  - libsanitizer=13.3.0=heb74ff8_1
-  - libsqlite=3.47.2=hee588c1_0
-  - libssh2=1.11.1=hf672d98_0
-  - libstdcxx=14.2.0=hc0a3c3a_1
-  - libstdcxx-devel_linux-64=13.3.0=h84ea5a7_101
-  - libstdcxx-ng=14.2.0=h4852527_1
-  - libuuid=2.38.1=h0b41bf4_0
-  - libxcrypt=4.4.36=hd590300_1
-  - libzlib=1.3.1=hb9d3cd8_2
-  - megahit=1.2.9=h5ca1c30_6
-  - mosdepth=0.3.10=h4e814b3_1
-  - ncurses=6.5=h2d0b736_2
-  - oniguruma=6.9.10=hb9d3cd8_0
-  - openssl=3.5.0=h7b32b05_1
-  - parallel=20241222=ha770c72_0
-  - perl=5.32.1=7_hd590300_perl5
-  - pip=24.3.1=pyh8b19718_2
-  - python=3.9.21=h9c0c6dc_1_cpython
-  - python_abi=3.9=7_cp39
-  - pyyaml=6.0.2=py39h9399b63_2
-  - readline=8.2=h8228510_1
-  - samtools=1.21=h96c455f_1
-  - seqkit=2.9.0=h9ee0642_0
-  - seqtk=1.4=h577a1d6_3
-  - setuptools=75.8.0=pyhff2d567_0
-  - sga=0.10.15=h26b121b_10
-  - spades=4.1.0=haf24da9_0
-  - sparsehash=2.0.4=hcb278e6_1
-  - sysroot_linux-64=2.17=h0157908_18
-  - time=1.9=hb9d3cd8_0
-  - tk=8.6.13=noxft_h4845f30_101
-  - toml=0.10.2=pyhd8ed1ab_1
-  - tomlkit=0.13.2=pyha770c72_1
-  - vsearch=2.29.2=hd6d6fdc_1
-  - wheel=0.45.1=pyhd8ed1ab_1
-  - xmltodict=0.14.2=pyhd8ed1ab_1
-  - yaml=0.2.5=h7f98852_2
-  - yq=3.4.3=pyhd8ed1ab_1
-  - zlib=1.3.1=hb9d3cd8_2
-  - zstd=1.5.6=ha6fb4c9_0
-  - gcc_linux-64
-  - gxx_linux-64
-  - make
+  # Core
+  - python=3.9
+  - pip
   - setuptools
   - wheel
+  - setuptools-scm
+
+  # Build tools (kept in case any pip packages need compilation)
+  - git
+  - make
+  - cmake
+  - pkg-config
+  - gcc_linux-64
+  - gxx_linux-64
+  - gfortran_linux-64
+
+  # Bioinformatics tools (pinned to observed versions)
+  - bamtools=2.5.3
+  - bowtie2=2.5.4
+  - fastani=1.34
+  - fastp=1.0.1
+  - megahit=1.2.9
+  - mosdepth=0.3.12
+  - samtools=1.22.1
+  - htslib=1.22.1
+  - seqkit=2.12.0
+  - seqtk=1.4
+  - sga=0.10.15
+  - spades=4.2.0
+  - vsearch=2.30.2
+  - enhjoerning=2.4.0
+
+  # Utilities and libraries
+  - jq
+  - yq
+  - parallel
+  - time
+  - perl
+  - gsl
+
+  # Python scientific stack
+  - numpy
+  - scipy
+  - pandas
+  - matplotlib
+  - biopython
+  - pysam
+  - numba
+  - llvmlite
+  - networkx
+  - pillow
+  - psutil
+  - pyyaml
+  - packaging
+  - python-dateutil
+  - pytz
+  - tzdata
+  - tqdm
+  - tabulate
+  - natsort
+  - cython
+
+  # Key packages that should not be built with pip
+  - pyrle=0.0.40
+  - pyranges=0.1.2
+
+  # Pip 
   - pip:
       - git+https://github.com/genomewalker/bam-filter.git@ed6230e3aaf0d0de8e4da0b070c48b915c169882#egg=bam_filter
-      - biopython==1.85
-      - contourpy==1.3.0
-      - cycler==0.12.1
-      - cython==3.0.11
-      - fonttools==4.55.3
       - get-reads-taxonomy==0.0.3
-      - importlib-resources==6.5.2
-      - kiwisolver==1.4.7
       - kneed==0.8.5
-      - llvmlite==0.43.0
-      - matplotlib==3.9.4
-      - natsort==8.4.0
-      - ncls==0.0.68
-      - networkx==3.2.1
-      - numba==0.60.0
-      - numpy==2.0.2
-      - packaging==24.2
-      - pandas==2.2.3
-      - pillow==11.1.0
-      - psutil==6.1.1
-      - pyparsing==3.2.1
-      - pyranges==0.1.2
-      - pyrle==0.0.40
-      - pysam==0.22.1
       - python-datatable==1.1.3
-      - python-dateutil==2.9.0.post0
-      - pytz==2024.2
-      - scipy==1.13.1
-      - six==1.17.0
-      - sorted-nearest==0.0.39
-      - tabulate==0.9.0
       - taxopy==0.13.0
-      - tqdm==4.67.1
-      - tzdata==2024.2
-      - zipp==3.21.0
+      - sorted-nearest==0.0.39
+      - ncls==0.0.68
