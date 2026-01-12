@@ -1,19 +1,18 @@
-#!/bin/bash/Rscript 
+#!/usr/bin/env Rscript
 
 ### LIBRARIES LOAD
 library(DescTools)
 
-# Install remotes if not already installed
 if (!requireNamespace("remotes", quietly = TRUE)) {
   install.packages("remotes", repos = "https://cloud.r-project.org")
 }
-
 library(remotes)
 
-# Install perk from GitHub
-#remotes::install_github("hyu-ub/perk/perk")
+# Install perk from GitHub (repo contains a /perk subfolder)
+if (!requireNamespace("perk", quietly = TRUE)) {
+  remotes::install_github("hyu-ub/perk", subdir = "perk", upgrade = "never")
+}
 
-# Load perk and other libraries
 library(perk)
 library(tidyverse)
 library(furrr)
