@@ -3,12 +3,14 @@
 ### LIBRARIES LOAD
 library(DescTools)
 
+library(DescTools)
+
 if (!requireNamespace("remotes", quietly = TRUE)) {
   install.packages("remotes", repos = "https://cloud.r-project.org")
 }
 library(remotes)
 
-# Install perk from GitHub (repo contains a /perk subfolder)
+# Install perk from GitHub (repo contains perk/DESCRIPTION)
 if (!requireNamespace("perk", quietly = TRUE)) {
   remotes::install_github("hyu-ub/perk", subdir = "perk", upgrade = "never")
 }
