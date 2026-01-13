@@ -13,7 +13,7 @@ dependencies:
   - setuptools-scm
   - memory_profiler
 
-  # Build tools (kept in case any pip packages need compilation)
+  # Build tools 
   - git
   - make
   - cmake
@@ -22,7 +22,8 @@ dependencies:
   - gxx_linux-64
   - gfortran_linux-64
 
-  # Bioinformatics tools (pinned to observed versions)
+  # Bioinformatics tools
+  - metadmg=0.4.2
   - bamtools=2.5.3
   - bowtie2=2.5.4
   - fastani=1.34
