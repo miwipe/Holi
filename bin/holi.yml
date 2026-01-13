@@ -11,6 +11,7 @@ dependencies:
   - setuptools
   - wheel
   - setuptools-scm
+  - memory_profiler
 
   # Build tools (kept in case any pip packages need compilation)
   - git
