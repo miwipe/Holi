@@ -28,10 +28,6 @@ if [ $# -lt 2 ]; then
     usage
 fi
 
-module load samtools/1.21
-module load seqtk/1.4
-module load bowtie2/2.4.2 
-
 # -------------------------------
 # Check for required tools
 # -------------------------------
@@ -45,6 +41,9 @@ REQUIRED_TOOLS=(
   samtools
   conda
   seqtk
+  filterBAM
+  unicorn
+  metaDMG-cpp
   )
 
 echo "Checking required tools..."
