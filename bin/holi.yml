@@ -23,7 +23,7 @@ dependencies:
   - gfortran_linux-64
 
   # Bioinformatics tools
-  - metadmg=0.4.2
+  - metadmg=0.4.1
   - bamtools=2.5.3
   - bowtie2=2.5.4
   - fastani=1.34
