@@ -263,48 +263,41 @@ if [ "$SKIP_PREPROCESSING_CLEANUP" = false ]; then
   export LOGS
 
   parallel -j "$THREADSP" --env LOGS '
-    sample={};
-    logfile="$LOGS/${sample}__cleanup_preprocessing.log";
+    sample={}
+    logfile="$LOGS/${sample}__cleanup_preprocessing.log"
 
     final="${sample}.ppm.vs.d4.fq.gz"
+    echo "[INFO] PWD: $(pwd)" > "$logfile"
+    echo "[INFO] Final: $final" >> "$logfile"
+
     if [ ! -s "$final" ]; then
-      echo "[SKIP] Final preprocessed file missing/empty: $final" > "$logfile"
+      echo "[SKIP] Final preprocessed file missing/empty: $final" >> "$logfile"
       exit 0
     fi
 
-    # Candidates to delete (only if they exist)
+    # Build candidates as a whitespace-separated list (safe here because filenames have no spaces)
     candidates=""
     for f in \
       "${sample}.ppm.fq" \
       "${sample}.ppm.vs.fq" \
       "${sample}.ppm.vs.d4.fq" \
       "${sample}.ppm.fq.gz" \
-      "${sample}.ppm.vs.fq.gz"
+      "${sample}.ppm.vs.fq.gz" \
+      "${sample}.fastp.report.html"
     do
       if [ -e "$f" ]; then
-        candidates="${candidates}"$'\n'"$f"
+        candidates="$candidates $f"
       fi
     done
-
-    # OPTIONAL: remove fastp html report(s) produced in working dir
-    # (comment out if you want to keep QC reports)
-    for f in "${sample}.fastp.report.html"; do
-      if [ -e "$f" ]; then
-        candidates="${candidates}"$'\n'"$f"
-      fi
-    done
-
-    candidates=$(echo "$candidates" | sed '/^$/d')
 
     if [ -z "$candidates" ]; then
-      echo "[INFO] Nothing to delete for $sample" > "$logfile"
+      echo "[INFO] Nothing to delete for $sample" >> "$logfile"
       exit 0
     fi
 
-    echo "[INFO] Deleting files for $sample:" > "$logfile"
-    echo "$candidates" >> "$logfile"
+    echo "[INFO] Deleting:$candidates" >> "$logfile"
 
-    echo "$candidates" | xargs -r rm -f
+    rm -f $candidates 2>> "$logfile"
 
     echo "[INFO] Cleanup done for $sample" >> "$logfile"
   ' :::: "$SAMPLE_LIST"
@@ -324,7 +317,7 @@ if [ "$SKIP_GTDB_MAPPING" = false ]; then
   log_step "Starting mapping and taxonomic classification against GTDB..."
 
   for db in {1..7}; do
-    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "bowtie2 ... > $MICROB_OUT/{}.gtdb.$db.bam"
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "bowtie2 --threads $THREADS -x $DB_PATH_bac.$db.fas.gz -U {}.ppm.vs.d4.fq.gz -k 1000 -D 15 -R 2 -N 1 -L 22 -i S,1,1.15 --np 1 --mp '1,1' --rdg '0,1' --rfg '0,1' --score-min 'L,0,-0.1' --mm --no-unal 2> $LOGS/{}.gtdb.$db.bowtie2.log | samtools view -bS - > $MICROB_OUT/{}.gtdb.$db.bam"
     check_success "Mapping to GTDB chunk $db"
   done
 
