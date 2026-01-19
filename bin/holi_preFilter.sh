@@ -360,8 +360,8 @@ if [ "$SKIP_GTDB_CLEANUP" = false ]; then
 	  # Keep:
 	  #   sample.gtdb.merged.bam
 	  candidates=$(find "$MICROB_OUT" -maxdepth 1 -type f \
-	    \( -name "${sample}.gtdb."[1-7]".bam" \
-	       -o -name "${sample}.gtdb."[1-7]".sorted.bam" \
+	    \( -name "${sample}.gtdb.[1-7].bam" \
+	       -o -name "${sample}.gtdb.[1-7].bam.sorted.bam" \
 	    \) \
 	    ! -name "${sample}.gtdb.merged.bam" \
 	  )
@@ -729,30 +729,29 @@ if [ "$SKIP_EUK_CLEANUP" = false ]; then
     #   ${sample}.sort.comp*.bam (keep)
     #
     # Build candidate list safely
-    candidates=$(find "$EUK_OUT" -maxdepth 1 -type f \
-      \( -name "${sample}.euk."*.bam \
-         -o -name "${sample}.core_nt.bam" \
-         -o -name "${sample}.phyNor."*.bam \
-         -o -name "${sample}.mito.bam" \
-         -o -name "${sample}.pla.bam" \
-         -o -name "${sample}.euk."*.comp.bam \
-         -o -name "${sample}.core_nt.comp.bam" \
-         -o -name "${sample}.phyNor."*.comp.bam \
-         -o -name "${sample}.mito.comp.bam" \
-         -o -name "${sample}.pla.comp.bam" \
-         -o -name "${sample}.euk."*.comp.sorted.bam \
-         -o -name "${sample}.core_nt.comp.sorted.bam" \
-         -o -name "${sample}.phyNor."*.comp.sorted.bam \
-         -o -name "${sample}.mito.comp.sorted.bam" \
-         -o -name "${sample}.pla.comp.sorted.bam" \
-		 -o -name "${sample}.comp.sam.gz" \
-		
-      \) \
-      ! -name "${sample}.comp.bam" \
-      ! -name "${sample}.comp.filtered"*.bam \
-      ! -name "${sample}.sort.comp"*.bam \
-    )
-
+	candidates=$(find "$EUK_OUT" -maxdepth 1 -type f \
+	  \( -name "${sample}.euk.*.bam" \
+	     -o -name "${sample}.core_nt.bam" \
+	     -o -name "${sample}.phyNor.*.bam" \
+	     -o -name "${sample}.mito.bam" \
+	     -o -name "${sample}.pla.bam" \
+	     -o -name "${sample}.euk.*.comp.bam" \
+	     -o -name "${sample}.core_nt.comp.bam" \
+	     -o -name "${sample}.phyNor.*.comp.bam" \
+	     -o -name "${sample}.mito.comp.bam" \
+	     -o -name "${sample}.pla.comp.bam" \
+	     -o -name "${sample}.euk.*.comp.sorted.bam" \
+	     -o -name "${sample}.core_nt.comp.sorted.bam" \
+	     -o -name "${sample}.phyNor.*.comp.sorted.bam" \
+	     -o -name "${sample}.mito.comp.sorted.bam" \
+	     -o -name "${sample}.pla.comp.sorted.bam" \
+	     -o -name "${sample}.comp.sam.gz" \
+	  \) \
+	  ! -name "${sample}.comp.bam" \
+	  ! -name "${sample}.comp.filtered*.bam" \
+	  ! -name "${sample}.sort.comp*.bam" \
+	)
+    
     if [ -z "$candidates" ]; then
       echo "[INFO] No mapping intermediates found to delete for $sample" > "$logfile"
       exit 0
@@ -905,7 +904,7 @@ if [ "$SKIP_UNICORN_TIDSTATS" = false ]; then
 	     -o $EUK_OUT/{}.comp.filtered.unicorn.tidstats \
 	     --names $TAX_PATH_NCBI/taxdump/names.dmp \
 	     --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
-	     --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz) \
+	     --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz /datasets/caeg_dataset/references/phylo_norway/20250127/*.acc2taxid.gz) \
 	     > $LOGS/{}__unicorn_tidstats.log 2>&1"
 	check_success "Unicorn refstats final filtering"
 else
