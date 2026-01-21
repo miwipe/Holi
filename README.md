@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/323573494.svg)](https://doi.org/10.5281/zenodo.18328110)
+
 # Holi: A Holistic Pipeline for Ancient Metagenomics
 Holi is a versatile bioinformatic pipeline designed for the analysis of ancient metagenomic data. It integrates tools for processing raw sequence reads, taxonomic classification, authenticity assessment, and results visualization, making it a solution for researchers working with ancient eDNA (aeDNA) and more specifically interested in the eukaryotes.
 
