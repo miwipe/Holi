@@ -131,11 +131,9 @@ lca_all_df   <- read_or_process(file.path(OUTPUT_DIR, "lca_all.tsv"), EUK_DIR, "
 raw_lca_all_df   <- read_or_process(file.path(OUTPUT_DIR, "raw_lca_all.tsv"), EUK_DIR, ".sort\\.comp\\.filtered\\.lca\\.gz$")
 acc2tax_all_df <- read_or_process(file.path(OUTPUT_DIR, "acc2tax_all.tsv"), EUK_DIR, ".acc2tax$")
 
-
-
 log_msg(paste("Stats rows:", nrow(stats_all_df)))
-log_msg(paste("LCA rows:", nrow(lca_all_df)))
-log_msg(paste("raw LCA rows:", nrow(raw_lca_all_df)))
+log_msg(paste("Aggregated LCA rows:", nrow(lca_all_df)))
+log_msg(paste("Raw LCA rows:", nrow(raw_lca_all_df)))
 log_msg(paste("Acc2Tax rows:", nrow(acc2tax_all_df)))
 
 #####################################################
@@ -152,9 +150,9 @@ if (file.exists(metaDMG_file)) {
 }
 
 #####################################################
-# Standardize column names
+# Standardise column names
 #####################################################
-stats_all_df <- stats_all_df |> rename(accession = Id)
+stats_all_df <- stats_all_df |> rename(accession = Id, n_reads_from_unicorn = n_reads)
 acc2tax_all_df <- acc2tax_all_df |> rename(accession = BAM_Reference, taxid = TaxID)
 
 accs <- stats_all_df |> select(accession) |> distinct() |> pull(accession)
@@ -179,8 +177,7 @@ if (file.exists(merged_file)) {
   log_msg(paste("Read existing merged stats + metaDMG:", merged_file))
 } else {
   merged_data <- stats_joined |> inner_join(tax_data, by = "taxid")
-  bf_md_data <- merged_data |> inner_join(metaDMG_data, by = c("library_id" = "library_id", "taxid" = "tax_name")) |>
-    rename(nreads = n_reads.x)
+  bf_md_data <- merged_data |> inner_join(metaDMG_data, by = c("library_id" = "library_id", "taxid" = "tax_name"))
   fwrite(bf_md_data, merged_file, sep = "\t", quote = FALSE)
   log_msg(paste("Merged stats + metaDMG written:", merged_file))
 }
