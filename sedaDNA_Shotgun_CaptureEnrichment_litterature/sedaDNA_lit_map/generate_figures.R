@@ -242,7 +242,7 @@ ggsave("../../figures/barplot_N_databases.png", width = 8, height = 5, dpi = 300
 # Count number of publications using each reference database and visualize.
 coordinates %>%
   filter(
-    year_published != "NA",
+    !is.na(year_published),
     TargetGroup != "Microorganisms",
     TargetTaxa != "Microorganisms",
     TargetTaxa != "Prokaryotes"
@@ -252,17 +252,110 @@ coordinates %>%
   group_by(mapper) %>%
   count() %>%
   ungroup() %>%
+  filter(!is.na(mapper), !is.na(n)) %>%              # Remove NAs
+  mutate(mapper = as.character(mapper)) %>%          # Ensure mapper is character
   ggplot(aes(mapper, n)) +
-  geom_bar(stat = "identity", position = "dodge") +
+  geom_bar(stat = "identity", position = "dodge", na.rm = TRUE) +
   theme_test() +
   theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
   labs(
-    title = "Publications by Reference Databases",
-    x = "Reference Target",
+    title = "Publications by Mapper",
+    x = "Mapper",
     y = "Number of Publications"
   )
 
-ggsave("../../figures/barplot_N_databases.png", width = 8, height = 5, dpi = 300)
+ggsave("../../figures/barplot_N_mappers.png", width = 8, height = 5, dpi = 300)
+
+
+
+# -----------------------------
+# Color by SampleType and shape by TargetGroup
+# -----------------------------
+# Filter dataset for valid entries and plot the world map with study sites.
+# Label sites and color by MolecularMethod shape.
+# Load libraries
+library(ggplot2)
+library(ggrepel)
+library(RColorBrewer)
+library(dplyr)
+
+# Prepare data
+coordinates_proj_SG_TE <- coordinates_proj %>%
+  mutate(Lab = as.factor(unlist(Lab))) %>%
+  filter(
+    year_published != "NA",
+    TargetGroup != "Microorganisms",
+    TargetTaxa != "Microorganisms",
+    TargetTaxa != "Prokaryotes"
+  )
+
+# Refined Okabe–Ito style palette (13 distinct, colorblind-safe tones)
+okabe_ito_mod <- c(
+  "#E69F00", # orange-yellow
+  "#56B4E9", # sky blue
+  "#009E73", # bluish green
+  "#8A2BE2", # violet (replaces lemon yellow)
+  "#0072B2", # blue
+  "#D55E00", # vermilion
+  "#CC79A7", # reddish purple
+  "#999999", # grey
+  "#A52A2A", # brown
+  "#00CED1", # turquoise
+  "#FFD700", # golden yellow
+  "#228B22", # forest green
+  "#DA70D6"  # orchid pink
+)
+
+# Main plot
+ggplot() +
+  # World map background
+  geom_sf(data = world_proj, fill = "lightgrey", color = "black") +
+  
+  # Sample points
+  geom_point(
+    data = coordinates_proj_SG_TE,
+    aes(x = X, y = Y, shape = TargetGroup, color = SampleType),
+    size = 3
+  ) +
+  
+  # Site labels
+#  geom_text_repel(
+#    data = coordinates_proj_SG_TE,
+#    aes(x = X, y = Y, label = SiteName),
+#    color = "black", size = 3, fontface = "bold", box.padding = 0.3
+#  ) +
+  
+  # Apply refined color palette
+  scale_color_manual(values = okabe_ito_mod) +
+  
+  # Coordinate system
+  coord_sf(crs = st_crs("+proj=robin")) +
+  
+  # Clean minimal theme
+  theme_minimal() +
+  theme(
+    panel.grid.major = element_line(color = "gray", linetype = "dashed"),
+    panel.background = element_rect(fill = "white", color = NA),
+    legend.position = "right",
+    legend.title = element_text(size = 10, face = "bold"),
+    legend.text = element_text(size = 9)
+  ) +
+  
+  # Labels and titles
+  labs(
+    title = "Ancient Metagenomic Study Sites",
+    subtitle = "Global distribution of sampling locations by Sample Type and Studied Organism",
+    x = "Longitude",
+    y = "Latitude",
+    shape = "Target Organism",
+    color = "Sample Type"
+  )
+
+ggsave("../../figures/SG_TE_map_SampleType_Target.png", width = 10, height = 7, dpi = 300)
+
+colnames(coordinates)
+
+
 
 
 #### END OF SCRIPT
