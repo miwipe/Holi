@@ -7,6 +7,7 @@ If you use **Holi** in your research, please cite it as:
 
 Pedersen, M. W., Vogel, N. A., Holman, L. E., & Wang, Y. (2026). *Holi* (Version 1.0.0) [Software]. Zenodo. https://doi.org/10.5281/zenodo.18328110
 
+## Description
 Holi is a versatile bioinformatic pipeline designed for the analysis of ancient metagenomic data. It integrates tools for processing raw sequence reads, taxonomic classification, authenticity assessment, and results visualization, making it a solution for researchers working with ancient eDNA (aeDNA) and more specifically interested in the eukaryotes.
 
 With a focus on the challenges unique to ancient metagenomics, such as low-quality and damaged DNA, Holi attempts accurate identification of taxa using a competitive setup, authentication of ancient DNA patterns, genome/reference-wide statistics and metrics for eventual reporting.
