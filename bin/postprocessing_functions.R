@@ -1,20 +1,19 @@
-#!/usr/bin/env Rscript
+#!/bin/bash/Rscript 
 
 ### LIBRARIES LOAD
 library(DescTools)
 
-library(DescTools)
-
+# Install remotes if not already installed
 if (!requireNamespace("remotes", quietly = TRUE)) {
   install.packages("remotes", repos = "https://cloud.r-project.org")
 }
+
 library(remotes)
 
-# Install perk from GitHub (repo contains perk/DESCRIPTION)
-if (!requireNamespace("perk", quietly = TRUE)) {
-  remotes::install_github("hyu-ub/perk", subdir = "perk", upgrade = "never")
-}
+# Install perk from GitHub
+#remotes::install_github("hyu-ub/perk/perk")
 
+# Load perk and other libraries
 library(perk)
 library(tidyverse)
 library(furrr)
@@ -269,7 +268,7 @@ aggregate_taxonomic_data_unicorn <- function(
     dplyr::summarise(
       n = dplyr::n_distinct(taxid),
       median_A = median(A, na.rm = TRUE),
-      penalized_weighted_median_A = penalized_weighted_median(A, nreads, A),
+      penalized_weighted_median_A = penalized_weighted_median(A, n_reads, A),
       median_c_b = median(c_b, na.rm = TRUE),
 	  median_A_CI_l = median(A_CI_l, na.rm = TRUE),
 	  median_A_CI_h = median(A_CI_h, na.rm = TRUE),
@@ -279,16 +278,16 @@ aggregate_taxonomic_data_unicorn <- function(
       sum_reference_length = sum(Length, na.rm = TRUE),
       mean_breadth_exp_ratio = mean(breath_ratio, na.rm = TRUE),
       median_breadth_exp_ratio = median(breath_ratio, na.rm = TRUE),
-      penalized_weighted_median_entropy = penalized_weighted_median(n_entropy, nreads, n_entropy),
-      penalized_weighted_median_gini = penalized_weighted_median(n_gini, nreads, n_gini),
-      penalized_weighted_median_breadth_exp_ratio = penalized_weighted_median(breath_ratio, nreads, breath_ratio),
+      penalized_weighted_median_entropy = penalized_weighted_median(n_entropy, n_reads, n_entropy),
+      penalized_weighted_median_gini = penalized_weighted_median(n_gini, n_reads, n_gini),
+      penalized_weighted_median_breadth_exp_ratio = penalized_weighted_median(breath_ratio, n_reads, breath_ratio),
       median_entropy = median(n_entropy, na.rm = TRUE),
       mean_entropy = mean(n_entropy, na.rm = TRUE),
       median_gini = median(n_gini, na.rm = TRUE),
       mean_gini = mean(n_gini, na.rm = TRUE),
-      median_n_reads = median(nreads, na.rm = TRUE),
-      mean_n_reads = mean(nreads, na.rm = TRUE),
-      total_n_reads = sum(nreads, na.rm = TRUE),
+      median_n_reads = median(n_reads, na.rm = TRUE),
+      mean_n_reads = mean(n_reads, na.rm = TRUE),
+      total_n_reads = sum(n_reads, na.rm = TRUE),
       n_reads_tad = sum(tad80, na.rm = TRUE),
       median_tax_abund_tad = median(tad80, na.rm = TRUE),
       .groups = "drop"
