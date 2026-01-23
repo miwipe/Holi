@@ -131,9 +131,11 @@ lca_all_df   <- read_or_process(file.path(OUTPUT_DIR, "lca_all.tsv"), EUK_DIR, "
 raw_lca_all_df   <- read_or_process(file.path(OUTPUT_DIR, "raw_lca_all.tsv"), EUK_DIR, ".sort\\.comp\\.filtered\\.lca\\.gz$")
 acc2tax_all_df <- read_or_process(file.path(OUTPUT_DIR, "acc2tax_all.tsv"), EUK_DIR, ".acc2tax$")
 
+
+
 log_msg(paste("Stats rows:", nrow(stats_all_df)))
-log_msg(paste("Aggregated LCA rows:", nrow(lca_all_df)))
-log_msg(paste("Raw LCA rows:", nrow(raw_lca_all_df)))
+log_msg(paste("LCA rows:", nrow(lca_all_df)))
+log_msg(paste("raw LCA rows:", nrow(raw_lca_all_df)))
 log_msg(paste("Acc2Tax rows:", nrow(acc2tax_all_df)))
 
 #####################################################
@@ -150,7 +152,7 @@ if (file.exists(metaDMG_file)) {
 }
 
 #####################################################
-# Standardise column names
+# Standardize column names
 #####################################################
 stats_all_df <- stats_all_df |> rename(accession = Id, n_reads_from_unicorn = n_reads)
 acc2tax_all_df <- acc2tax_all_df |> rename(accession = BAM_Reference, taxid = TaxID)
@@ -161,6 +163,8 @@ tax_ids_lst <- tax_ids |> select(taxid) |> distinct() |> pull(taxid)
 
 stats_joined <- stats_all_df |>
   inner_join(acc2tax_all_df, by = c("accession", "library_id"))
+### aggregated statistics to a species level - species taxids have multiple references, we need to combine them and get the mean/sum for further processing
+stats_species <- summarise_stats_joined_all(stats_joined)
 
 tax_data <- getTaxonomy(
   tax_ids_lst,
@@ -171,12 +175,12 @@ tax_data <- getTaxonomy(
 #####################################################
 # Merge stats, taxonomy, and metaDMG
 #####################################################
-merged_file <- file.path(OUTPUT_DIR, "merged_stats_lca.tsv")
+merged_file <- file.path(OUTPUT_DIR, "merged_stats_lca_species_level.tsv")
 if (file.exists(merged_file)) {
   bf_md_data <- fread(merged_file, sep = "\t", data.table = FALSE)
   log_msg(paste("Read existing merged stats + metaDMG:", merged_file))
 } else {
-  merged_data <- stats_joined |> inner_join(tax_data, by = "taxid")
+  merged_data <- stats_species |> inner_join(tax_data, by = "taxid")
   bf_md_data <- merged_data |> inner_join(metaDMG_data, by = c("library_id" = "library_id", "taxid" = "tax_name"))
   fwrite(bf_md_data, merged_file, sep = "\t", quote = FALSE)
   log_msg(paste("Merged stats + metaDMG written:", merged_file))
@@ -185,12 +189,14 @@ if (file.exists(merged_file)) {
 #####################################################
 # Aggregate data
 #####################################################
-agg_file <- file.path(OUTPUT_DIR, "genus_level.tsv")
+agg_file <- file.path(OUTPUT_DIR, "merged_stats_lca_genus_level.tsv")
 if (file.exists(agg_file)) {
   bf_md_agg_data <- fread(agg_file, sep = "\t", data.table = FALSE)
   log_msg(paste("Read existing aggregated data:", agg_file))
 } else {
-  bf_md_agg_data <- aggregate_taxonomic_data_unicorn(bf_md_data)
+  bf_md_agg_data <- summarise_bf_genus(bf_md_data, nonnum_mode = "first")
+  fwrite(bf_md_agg_data, agg_file, sep = "\t", quote = FALSE)
+  log_msg(paste("Aggregated data to genus file written:", agg_file))
 
 }
 
