@@ -303,9 +303,11 @@ okabe_ito_mod <- c(
   "#00CED1", # turquoise
   "#FFD700", # golden yellow
   "#228B22", # forest green
-  "#DA70D6"  # orchid pink
+  "#DA70D6", # orchid pink
+  "#006D6F", # deep teal
+  "#6A5ACD", # slate blue
+  "#556B2F"  # dark olive green
 )
-
 # Main plot
 ggplot() +
   # World map background
