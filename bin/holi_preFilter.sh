@@ -792,7 +792,7 @@ if [ "$SKIP_BAM_FILTERING" = false ]; then
 		  else
 		    /projects/wintherpedersen/apps/unicorn/unicorn refstats \
 		      -b "$EUK_OUT/${sample}.comp.bam" \
-		      -t "$THREADS" -minreads 3 \
+		      -t "$THREADS" --minreads 3 \
 		      --outbam "$outbam" \
 		      --outstat "$outstat" \
 		      --names "$TAX_PATH_NCBI/taxdump/names.dmp" \
