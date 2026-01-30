@@ -54,8 +54,8 @@ get_seqkit_stats_16() {
   if [[ -f "$fq" ]]; then
     local line
     # seqkit stats -T outputs TSV; we take columns 4..end from row 2
-    line=$(seqkit stats -a -T "$fq" \
-      | awk 'NR==2 {for(i=4;i<=NF;i++) printf "%s%s", $i,(i==NF?ORS:OFS)}')
+	line=$(seqkit stats -a -T "$fq" \
+	  | awk -F $'\t' 'NR==2 {for(i=4;i<=NF;i++) printf "%s%s", $i,(i==NF?ORS:OFS)}' OFS=$'\t')
 
     local stats=()
     # Read as TSV (not whitespace)
