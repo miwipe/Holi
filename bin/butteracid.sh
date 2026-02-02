@@ -235,7 +235,7 @@ process_library() {
     # FASTQ files
     local FASTQS=(
         $FASTQ_LANE_BASE/${LIB_ID}_L001_R1_001.fastq.gz
-        $FASTQ_LANE_BASE/${LIB_ID}_L002_R2_001.fastq.gz
+        $FASTQ_LANE_BASE/${LIB_ID}_L002_R1_001.fastq.gz
         $FASTQ_LANE_BASE/${LIB_ID}_L003_R1_001.fastq.gz
         $FASTQ_LANE_BASE/${LIB_ID}_L004_R1_001.fastq.gz
         "$FASTQ_LOW_COMPLEXITY_BASE/${LIB_ID}.ppm.vs.d4.fq.gz"
