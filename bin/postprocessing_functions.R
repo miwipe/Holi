@@ -19,111 +19,205 @@ library(tidyverse)
 library(furrr)
 
 ####
-
 dmg_fwd_CCC <- function(df, smp, ci = "z-transform", nperm = NULL, nproc = 1) {
+  # packages used
+  require(dplyr)
+  require(tidyr)
+  require(furrr)
+  require(purrr)
+  require(tibble)
+
+  old_plan <- future::plan()
+  on.exit(future::plan(old_plan), add = TRUE)
+
   options(future.globals.maxSize = 2291289600)
-  plan(multisession, workers = nproc)
-  
-  results <- future_map_dfr(smp, function(X) {
-    dist_data <- df %>%
-      filter(library_id == X) %>%
-      select(tax_name, library_id, starts_with("fwf")) %>%
-      pivot_longer(
-        cols = -c(tax_name, library_id),
+  future::plan(future::multisession, workers = nproc)
+
+  # --- Pre-filter once (fast) and ensure key columns have stable types
+  df2 <- df %>%
+    dplyr::filter(.data$library_id %in% smp) %>%
+    dplyr::mutate(
+      library_id = as.character(.data$library_id),
+      tax_name   = as.character(.data$tax_name)
+    )
+
+  if (nrow(df2) == 0) return(tibble())
+
+  # Split once (fast). Only libraries that exist in df2 will be processed.
+  chunks <- split(df2, df2$library_id)
+
+  # Helper: safe numeric conversion for x extracted from column names
+  extract_x <- function(type, prefix) {
+    suppressWarnings(as.integer(sub(paste0("^", prefix), "", type)))
+  }
+
+  results <- furrr::future_map_dfr(chunks, function(dX) {
+    if (is.null(dX) || nrow(dX) == 0) return(NULL)
+    X <- as.character(dX$library_id[1])
+
+    # Identify columns (avoid errors if missing)
+    fwf_cols  <- grep("^fwf\\d+$",  names(dX), value = TRUE)
+    fwdx_cols <- grep("^fwdx\\d+$", names(dX), value = TRUE)
+
+    if (length(fwf_cols) == 0 || length(fwdx_cols) == 0) return(NULL)
+
+    # --- Build long tables with consistent join-key types
+    dist_data <- dX %>%
+      dplyr::select(.data$tax_name, .data$library_id, dplyr::all_of(fwf_cols)) %>%
+      tidyr::pivot_longer(
+        cols = -c(.data$tax_name, .data$library_id),
         names_to = "type",
         values_to = "f_fwd"
       ) %>%
-      mutate(
-        x = as.numeric(gsub("fwf", "", type)),
-        f_fwd = suppressWarnings(as.numeric(f_fwd))  # <–– force numeric
+      dplyr::mutate(
+        x = extract_x(.data$type, "fwf"),               # integer
+        f_fwd = suppressWarnings(as.numeric(.data$f_fwd))
       ) %>%
-      select(-type)
-    
-    dist_fit <- df %>%
-      filter(library_id == X) %>%
-      select(tax_name, library_id, matches("^fwdx\\d+")) %>%
-      pivot_longer(
-        cols = -c(tax_name, library_id),
+      dplyr::select(-.data$type) %>%
+      dplyr::filter(!is.na(.data$x)) %>%
+      dplyr::mutate(
+        x = as.integer(.data$x),                        # enforce integer
+        library_id = as.character(.data$library_id),    # enforce character
+        tax_name = as.character(.data$tax_name)
+      )
+
+    dist_fit <- dX %>%
+      dplyr::select(.data$tax_name, .data$library_id, dplyr::all_of(fwdx_cols)) %>%
+      tidyr::pivot_longer(
+        cols = -c(.data$tax_name, .data$library_id),
         names_to = "type",
         values_to = "Dx_fwd"
       ) %>%
-      mutate(
-        x = as.numeric(gsub("fwdx", "", type)),
-        Dx_fwd = suppressWarnings(as.numeric(Dx_fwd))  # <–– force numeric
+      dplyr::mutate(
+        x = extract_x(.data$type, "fwdx"),              # integer
+        Dx_fwd = suppressWarnings(as.numeric(.data$Dx_fwd))
       ) %>%
-      select(-type)
-    
-    data <- dist_data %>%
-      inner_join(dist_fit, by = join_by(tax_name, library_id, x)) %>%
-      group_by(tax_name) %>%
-      arrange(x, .by_group = TRUE)
-    
-    if (nrow(dist_data) == 0) {
-      return(NULL)
-    }
-    
-    fits <- data %>%
-      do({
-        ccc <- DescTools::CCC(.$f_fwd, .$Dx_fwd, ci = ci)
-        
-        if (!is.null(nperm)) {
-          ccc_perm <- perk_test(
-            .$f_fwd, .$Dx_fwd,
-            B = nperm, method = "ccc", alternative = "greater"
-          )
-          tibble(
-            rho_c = ccc$rho.c$est,
-            rho_lwr_ci = ccc$rho.c$lwr.ci,
-            rho_upr_ci = ccc$rho.c$upr.ci,
-            C_b = ccc$C.b,
-            l_shift = ccc$l.shift,
-            s_shift = ccc$s.shift,
-            library_id = X,
-            rho_c_perm = ccc_perm$estimate,
-            rho_c_perm_pval = ccc_perm$p.value
-          )
-        } else {
-          tibble(
-            rho_c = ccc$rho.c$est,
-            rho_lwr_ci = ccc$rho.c$lwr.ci,
-            rho_upr_ci = ccc$rho.c$upr.ci,
-            C_b = ccc$C.b,
-            l_shift = ccc$l.shift,
-            s_shift = ccc$s.shift,
-            library_id = X
-          )
-        }
-      })
-    fits
+      dplyr::select(-.data$type) %>%
+      dplyr::filter(!is.na(.data$x)) %>%
+      dplyr::mutate(
+        x = as.integer(.data$x),
+        library_id = as.character(.data$library_id),
+        tax_name = as.character(.data$tax_name)
+      )
+
+    if (nrow(dist_data) == 0 || nrow(dist_fit) == 0) return(NULL)
+
+    # --- Join is now safe because tax_name/library_id are character and x is integer in BOTH
+    joined <- dplyr::inner_join(
+      dist_data, dist_fit,
+      by = dplyr::join_by(tax_name, library_id, x)
+    ) %>%
+      dplyr::arrange(.data$tax_name, .data$x) %>%
+      dplyr::group_by(.data$tax_name)
+
+    # Compute CCC per taxon; skip taxa with too few valid points
+    out <- dplyr::group_modify(joined, function(.x, .g) {
+      # keep complete cases
+      .x <- .x %>% dplyr::filter(!is.na(.data$f_fwd), !is.na(.data$Dx_fwd))
+
+      if (nrow(.x) < 2) return(tibble())
+
+      # CCC can error for some degenerate inputs; catch and skip
+      ccc <- tryCatch(
+        DescTools::CCC(.x$f_fwd, .x$Dx_fwd, ci = ci),
+        error = function(e) NULL
+      )
+      if (is.null(ccc)) return(tibble())
+
+      if (!is.null(nperm)) {
+        ccc_perm <- tryCatch(
+          perk_test(.x$f_fwd, .x$Dx_fwd, B = nperm, method = "ccc", alternative = "greater"),
+          error = function(e) NULL
+        )
+
+        tibble::tibble(
+          rho_c = ccc$rho.c$est,
+          rho_lwr_ci = ccc$rho.c$lwr.ci,
+          rho_upr_ci = ccc$rho.c$upr.ci,
+          C_b = ccc$C.b,
+          l_shift = ccc$l.shift,
+          s_shift = ccc$s.shift,
+          library_id = X,
+          rho_c_perm = if (!is.null(ccc_perm)) ccc_perm$estimate else NA_real_,
+          rho_c_perm_pval = if (!is.null(ccc_perm)) ccc_perm$p.value else NA_real_
+        )
+      } else {
+        tibble::tibble(
+          rho_c = ccc$rho.c$est,
+          rho_lwr_ci = ccc$rho.c$lwr.ci,
+          rho_upr_ci = ccc$rho.c$upr.ci,
+          C_b = ccc$C.b,
+          l_shift = ccc$l.shift,
+          s_shift = ccc$s.shift,
+          library_id = X
+        )
+      }
+    }) %>%
+      dplyr::ungroup()
+
+    out
   }, .progress = TRUE)
-  
-  plan(sequential)
-  return(results)
+
+  results
 }
 
 
-### metaDMG filter function - variables can be changed here we filter at rank species, only Euks and split the euks into plants and animals
-### we then estimate of a damage fit is good or bad estimated with the CCC model expected damage vs estimated damage fit 
-filter_metadmg <- function(df, samples){
-  holi_data_sp_euk <- df |>
-    #filter(rank == "species") |> # 	NEEDS TO BE CONSISTNAT WITH METADMG AGG FILE 
-    filter(grepl("Eukaryota", taxa_path)) |> # must be a Eukaryote 
-    mutate(PlantAnimal = case_when( # define plant/animal based on taxpath 
-      grepl("Viridiplantae", taxa_path) ~ "plant",
-      grepl("Metazoa", taxa_path) ~ "animal",
-    )) |>
-    rename(tax_name = taxid, n_reads = nreads) # rename these for ease later
-  
-  
-  # get the damage fits using CCC
-  dat_all <- dmg_fwd_CCC(holi_data_sp_euk, samples, ci = "asymptotic", nperm = 100, nproc = 14)
-  
-  # define good and bad hits
-  # bad if confidence interval is above 1 or below 0 (despite other params)
-  # good if rho_c > 0.85 and C_b > 0.9 and rho_c p-value < 0.1
-  dat_filt <- inner_join(dat_all, holi_data_sp_euk) |>
-    mutate(fit = ifelse(rho_c >= 0.85 & C_b > 0.9 & round(rho_c_perm_pval, 3) < 0.1 & !is.na(rho_c), "good", "bad")) |>
-    mutate(fit = ifelse(q_CI_h >= 1 | c_CI_l <= 0, "bad", fit))
+# Add CCC damage-fit statistics to metaDMG lca_all df (NO fit classification)
+add_metadmg_ccc_stats <- function(df, samples, nperm = 100, nproc = 14, ci = "asymptotic") {
+
+  # Only rows that can support the CCC calc (Euks + rank species, because your columns are per-tax row)
+  df_euk_sp <- df |>
+    dplyr::filter(grepl("Eukaryota", .data$taxa_path)) |>
+    dplyr::mutate(
+      library_id = as.character(.data$library_id),
+      taxid      = as.character(.data$taxid)
+    ) |>
+    # keep your Plant/Animal label if you want it downstream (optional)
+    dplyr::mutate(
+      PlantAnimal = dplyr::case_when(
+        grepl("Viridiplantae", .data$taxa_path) ~ "plant",
+        grepl("Metazoa",       .data$taxa_path) ~ "animal",
+        TRUE ~ NA_character_
+      )
+    ) |>
+    # dmg_fwd_CCC expects tax_name
+    dplyr::rename(tax_name = taxid)
+
+  if (nrow(df_euk_sp) == 0) {
+    # nothing to add
+    return(df)
+  }
+
+  # Compute CCC stats per (library_id, tax_name)
+  ccc_stats <- dmg_fwd_CCC(
+    df   = df_euk_sp,
+    smp  = samples,
+    ci   = ci,
+    nperm = nperm,
+    nproc = nproc
+  )
+
+  if (nrow(ccc_stats) == 0) {
+    return(df)
+  }
+
+  # Join back: ccc_stats is per library_id, tax_name
+  ccc_stats2 <- ccc_stats |>
+    dplyr::mutate(
+      library_id = as.character(.data$library_id),
+      taxid      = as.character(.data$tax_name)
+    ) |>
+    dplyr::select(-.data$tax_name)
+
+  # Left join onto full df (non-euk species or other ranks get NA stats)
+  df_out <- df |>
+    dplyr::mutate(
+      library_id = as.character(.data$library_id),
+      taxid      = as.character(.data$taxid)
+    ) |>
+    dplyr::left_join(ccc_stats2, by = c("library_id", "taxid"))
+
+  df_out
 }
 
 
@@ -151,49 +245,72 @@ penalized_weighted_median <- function(values, weights, ratios) {
   median_index <- min(which(data$cum_weights >= total_weights / 2))
   return(data$values[median_index])
 }
+
 summarise_stats_joined_all <- function(
     stats_joined,
     group_cols   = c("library_id", "taxid"),
     weight_col   = "n_reads_from_unicorn",
     exclude_cols = c("accession", "library_id", "taxid", "n_reads_from_unicorn", "n_alns"),
-    sum_cols     = c("reference_length")
+    sum_cols     = c("reference_length"),
+    # NEW:
+    keep_nonnum  = TRUE,
+    nonnum_mode  = c("first", "collapse")
 ) {
+  nonnum_mode <- match.arg(nonnum_mode)
+
   stopifnot(all(group_cols %in% names(stats_joined)))
   stopifnot(weight_col %in% names(stats_joined))
-  
+
+  stats_joined <- dplyr::as_tibble(stats_joined) |>
+    dplyr::mutate(
+      "{weight_col}" := suppressWarnings(as.numeric(gsub(",", "", .data[[weight_col]])))
+    )
+
   # numeric columns
   num_cols <- names(stats_joined)[vapply(stats_joined, is.numeric, logical(1))]
-  
+
   # columns we actually want to summarise
   target_cols <- setdiff(num_cols, c(group_cols, exclude_cols))
-  
-  # of those, which should be summed (and exist + numeric)
+
+  # sum vs mean
   sum_cols_present <- intersect(sum_cols, target_cols)
-  
-  # the rest: mean only
   mean_cols <- setdiff(target_cols, sum_cols_present)
-  
+
+  # non-numeric columns to carry
+  if (keep_nonnum) {
+    nonnum_cols <- setdiff(names(stats_joined), num_cols)
+    # don't try to "carry" grouping columns or accession
+    nonnum_cols <- setdiff(nonnum_cols, c(group_cols, "accession"))
+  } else {
+    nonnum_cols <- character(0)
+  }
+
   dplyr::as_tibble(stats_joined) |>
     dplyr::group_by(dplyr::across(dplyr::all_of(group_cols))) |>
     dplyr::summarise(
       n_references = if ("accession" %in% names(stats_joined)) dplyr::n_distinct(accession) else dplyr::n(),
       total_reads_from_unicorn  = sum(.data[[weight_col]], na.rm = TRUE),
-      
-      # mean for all remaining numeric cols
+
+      # mean for numeric cols
+      dplyr::across(dplyr::all_of(mean_cols), ~ mean(.x, na.rm = TRUE)),
+
+      # sum for requested cols
+      dplyr::across(dplyr::all_of(sum_cols_present), ~ sum(.x, na.rm = TRUE)),
+
+      # NEW: carry non-numeric taxonomy (and other) columns
       dplyr::across(
-        dplyr::all_of(mean_cols),
-        ~ mean(.x, na.rm = TRUE)
+        dplyr::all_of(nonnum_cols),
+        ~ if (nonnum_mode == "first") {
+          dplyr::first(stats::na.omit(.x))
+        } else {
+          paste(unique(stats::na.omit(.x)), collapse = "; ")
+        }
       ),
-      
-      # sum for reference_length (or any other sum_cols you pass)
-      dplyr::across(
-        dplyr::all_of(sum_cols_present),
-        ~ sum(.x, na.rm = TRUE)
-      ),
-      
+
       .groups = "drop"
     )
 }
+
 
 summarise_bf_genus <- function(
     bf_md_data,
