@@ -6,29 +6,32 @@
 # Usage information
 # -------------------------------
 usage() {
-    echo "Usage: $0 <config.yml> <sample.list> [--skip-preprocessing] [--lca-assignment] [--unicorn]"
+    echo "Usage: $0 <config.yml> <sample.list> [--skip-preprocessing] [--lca-assignment] [--unicorn] [--single-end]"
     echo
     echo "Arguments:"
     echo "  <config.yml>            Path to YAML configuration file."
     echo "  <sample.list>           File containing list of sample names."
     echo
     echo "Options:"
+    echo "  --single-end            Treat input as single-end FASTQ (no R2, no merging)."
+    echo "                          Looks for files matching: *_<sample>_*R1*_001.fastq.gz"
     echo "  --skip-preprocessing    Skip trimming, merging, duplicate removal, and complexity filtering."
     echo "  --skip-preprocessing-cleanup  Do NOT delete preprocessing intermediates after final .ppm.vs.d4.fq.gz exists."
     echo "  --skip-gtdb-mapping     Skip GTDB mapping + merge/sort steps."
-	echo "  --skip-gtdb-cleanup           Do NOT delete GTDB chunk BAMs after .gtdb.merged.bam exists."
-	echo "  --skip-microbial-split  Skip bacterial/eukaryotic read ID extraction + FASTQ subsetting."
-	echo "  --skip-euk-mapping      Skip all eukaryotic mapping steps (129 parts + mito + phyNor + core_nt + plastid)."
-	echo "  --skip-euk-cleanup            Do NOT delete euk/core_nt/phyNor/mito/pla intermediates after .comp.bam exists."
-	echo "  --skip-comp-merge       Skip compress+sort+merge that produces *.comp.bam (assumes it already exists)."
-	echo "  --skip-bam-filtering    Skip Unicorn/filterBAM step (keeps *.comp.bam for downstream if not skipped)."
-	echo "  --skip-metadmg          Skip metaDMG lca/dfit/aggregate steps."
-	echo "  --skip-unicorn-tidstats Skip final unicorn tidstats step."
+    echo "  --skip-gtdb-cleanup           Do NOT delete GTDB chunk BAMs after .gtdb.merged.bam exists."
+    echo "  --skip-microbial-split  Skip bacterial/eukaryotic read ID extraction + FASTQ subsetting."
+    echo "  --skip-euk-mapping      Skip all eukaryotic mapping steps (129 parts + mito + phyNor + core_nt + plastid)."
+    echo "  --skip-euk-cleanup            Do NOT delete euk/core_nt/phyNor/mito/pla intermediates after .comp.bam exists."
+    echo "  --skip-comp-merge       Skip compress+sort+merge that produces *.comp.bam (assumes it already exists)."
+    echo "  --skip-bam-filtering    Skip Unicorn/filterBAM step (keeps *.comp.bam for downstream if not skipped)."
+    echo "  --skip-metadmg          Skip metaDMG lca/dfit/aggregate steps."
+    echo "  --skip-unicorn-tidstats Skip final unicorn tidstats step."
     echo
     echo "Example:"
     echo "  $0 config.yml sample.list"
     echo "  $0 config.yml sample.list --skip-preprocessing"
-	echo "  $0 config.yml sample.list --lca-assignment"
+    echo "  $0 config.yml sample.list --lca-assignment"
+    echo "  $0 config.yml sample.list --single-end"
     exit 1
 }
 
@@ -79,7 +82,7 @@ fi
 
 
 # -------------------------------
-# Load config file 
+# Load config file
 # -------------------------------
 
 CONFIG=${1:-config.yml}
@@ -162,6 +165,7 @@ for dir in "${REQUIRED_DIRS[@]}"; do
         log_info "Directory $dir exists."
     fi
 done
+
 # ---------------------------
 ## Holi pipeline:
 # ---------------------------
@@ -182,6 +186,9 @@ SKIP_UNICORN_TIDSTATS=false
 LCA_ASSIGN=false
 UNICORN=false
 
+# NEW: single-end mode
+SINGLE_END=false
+
 
 CONFIG="$1"
 SAMPLE_LIST="$2"
@@ -189,19 +196,20 @@ shift 2
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --skip-preprocessing)   SKIP_PREPROCESSING=true ;;
+    --single-end)              SINGLE_END=true ;;
+    --skip-preprocessing)      SKIP_PREPROCESSING=true ;;
 	--skip-preprocessing-cleanup)	SKIP_PREPROCESSING_CLEANUP=true ;;
-    --skip-gtdb-mapping)    SKIP_GTDB_MAPPING=true ;;
-	--skip-gtdb-cleanup)	SKIP_GTDB_CLEANUP=true ;;
-    --skip-microbial-split) SKIP_MICROBIAL_SPLIT=true ;;
-    --skip-euk-mapping)     SKIP_EUK_MAPPING=true ;;
-	--skip-euk-cleanup)	SKIP_EUK_CLEANUP=true ;;
-	--skip-comp-merge)      SKIP_COMP_MERGE=true ;;
-    --skip-bam-filtering)   SKIP_BAM_FILTERING=true ;;
-    --skip-metadmg)         SKIP_METADMG=true ;;
-    --skip-unicorn-tidstats) SKIP_UNICORN_TIDSTATS=true ;;
-    --lca-assignment)       LCA_ASSIGN=true ;;
-    --unicorn)              UNICORN=true ;;
+    --skip-gtdb-mapping)       SKIP_GTDB_MAPPING=true ;;
+	--skip-gtdb-cleanup)       SKIP_GTDB_CLEANUP=true ;;
+    --skip-microbial-split)    SKIP_MICROBIAL_SPLIT=true ;;
+    --skip-euk-mapping)        SKIP_EUK_MAPPING=true ;;
+	--skip-euk-cleanup)        SKIP_EUK_CLEANUP=true ;;
+	--skip-comp-merge)         SKIP_COMP_MERGE=true ;;
+    --skip-bam-filtering)      SKIP_BAM_FILTERING=true ;;
+    --skip-metadmg)            SKIP_METADMG=true ;;
+    --skip-unicorn-tidstats)   SKIP_UNICORN_TIDSTATS=true ;;
+    --lca-assignment)          LCA_ASSIGN=true ;;
+    --unicorn)                 UNICORN=true ;;
     *) echo "[ERROR] Unknown option: $1"; usage ;;
   esac
   shift
@@ -228,16 +236,57 @@ fi
 
 if [ "$SKIP_PREPROCESSING" = false ]; then
     ####################### QC ##############################
-    log_step "Trimming and merging reads with fastp..."
-    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "fastp \
-      -i \"${INPATH}/{}\"*R1*.fastq.gz \
-      -I \"${INPATH}/{}\"*R2*.fastq.gz \
-      -m --merged_out '{}.ppm.fq' \
-      -V --detect_adapter_for_pe \
-      -D --dup_calc_accuracy 5 \
-      -g -x -q 30 -e 25 -l 30 -y -c -p \
-      -h '{}.fastp.report.html' -w 1 > $LOGS/{}__fastp.log 2>&1"
-    check_success "Trimming and merging reads"
+
+    if [ "$SINGLE_END" = true ]; then
+        log_step "Trimming single-end reads with fastp..."
+
+        export INPATH LOGS
+        cat "$SAMPLE_LIST" | parallel -j "$THREADSP" --env INPATH --env LOGS '
+          sample={}
+          logfile="$LOGS/${sample}__fastp.log"
+
+          # Match your naming convention: *_<sample>_*R1*_001.fastq.gz
+          matches=( ${INPATH}/*_${sample}_*R1*_001.fastq.gz )
+
+          # No matches -> bash keeps the literal pattern
+          if [[ "${matches[0]}" == "${INPATH}/*_${sample}_*R1*_001.fastq.gz" ]]; then
+            echo "ERROR: No FASTQ matched pattern: ${INPATH}/*_${sample}_*R1*_001.fastq.gz" > "$logfile"
+            exit 1
+          fi
+
+          # Multiple matches -> fail loudly (lane splits etc.)
+          if (( ${#matches[@]} > 1 )); then
+            echo "ERROR: Multiple FASTQs matched for ${sample}:" > "$logfile"
+            printf "%s\n" "${matches[@]}" >> "$logfile"
+            echo "Refine pattern or merge lanes before running." >> "$logfile"
+            exit 1
+          fi
+
+          in_fq="${matches[0]}"
+
+          fastp \
+            -i "$in_fq" \
+            -o "${sample}.ppm.fq" \
+            -V \
+            -D --dup_calc_accuracy 5 \
+            -g -x -q 30 -e 25 -l 30 -y -c -p \
+            -h "${sample}.fastp.report.html" \
+            -w 1 > "$logfile" 2>&1
+        '
+        check_success "Trimming single-end reads"
+
+    else
+        log_step "Trimming and merging reads with fastp..."
+        cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "fastp \
+          -i \"${INPATH}/{}\"*R1*.fastq.gz \
+          -I \"${INPATH}/{}\"*R2*.fastq.gz \
+          -m --merged_out '{}.ppm.fq' \
+          -V --detect_adapter_for_pe \
+          -D --dup_calc_accuracy 5 \
+          -g -x -q 30 -e 25 -l 30 -y -c -p \
+          -h '{}.fastp.report.html' -w 1 > $LOGS/{}__fastp.log 2>&1"
+        check_success "Trimming and merging reads"
+    fi
 
     log_step "Removing duplicates with vsearch..."
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "vsearch \
@@ -257,6 +306,7 @@ if [ "$SKIP_PREPROCESSING" = false ]; then
 else
     log_step "Skipping preprocessing as requested."
 fi
+
 if [ "$SKIP_PREPROCESSING_CLEANUP" = false ]; then
   log_step "Cleaning preprocessing intermediates where final *.ppm.vs.d4.fq.gz exists..."
 
