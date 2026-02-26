@@ -118,8 +118,9 @@ colnames(coordinates)
 # -----------------------------
 # Count publications per year (after filtering) and plot as bar chart.
 coordinates %>%
+  mutate(year_published = suppressWarnings(as.integer(as.character(year_published)))) %>%  # ensure integer years
   filter(
-    year_published != "NA",
+    !is.na(year_published),
     TargetGroup != "Microorganisms",
     TargetTaxa != "Microorganisms"
   ) %>%
@@ -130,6 +131,7 @@ coordinates %>%
   ungroup() %>%
   ggplot(aes(x = year_published, y = n)) +
   geom_bar(stat = "identity") +
+  scale_x_continuous(breaks = function(x) seq(floor(min(x, na.rm = TRUE)), ceiling(max(x, na.rm = TRUE)), by = 1)) +  # whole years only
   scale_y_continuous(breaks = pretty_breaks(n = 5)) +
   theme_test() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
@@ -146,23 +148,31 @@ ggsave("../../figures/barplot_no_publications.png", width = 6, height = 4, dpi =
 # -----------------------------
 # Cumulative Publication Trend
 # -----------------------------
-# Compute cumulative counts over time for each method.
+# Compute cumulative counts over time for each method, ensuring missing years are filled with 0.
 coordinates %>%
+  mutate(year_published = suppressWarnings(as.integer(as.character(year_published)))) %>%  # ensure integer years
   filter(
-    year_published != "NA",
+    !is.na(year_published),
     TargetGroup != "Microorganisms",
     TargetTaxa != "Microorganisms"
   ) %>%
   select(year_published, MolecularMethod, DOI) %>%
   unique() %>%
   group_by(year_published, MolecularMethod) %>%
-  count() %>%
+  count(name = "n") %>%
   ungroup() %>%
-  arrange(year_published) %>%
+  tidyr::complete(
+    year_published = seq(min(year_published, na.rm = TRUE), max(year_published, na.rm = TRUE), by = 1),
+    MolecularMethod,
+    fill = list(n = 0)
+  ) %>%
+  arrange(MolecularMethod, year_published) %>%
   group_by(MolecularMethod) %>%
   mutate(cumulative_n = cumsum(n)) %>%
+  ungroup() %>%
   ggplot(aes(x = year_published, y = cumulative_n, fill = MolecularMethod)) +
   geom_bar(stat = "identity") +
+  scale_x_continuous(breaks = function(x) seq(floor(min(x, na.rm = TRUE)), ceiling(max(x, na.rm = TRUE)), by = 1)) +  # whole years only
   scale_fill_brewer(palette = "Set2") +
   scale_y_continuous(breaks = pretty_breaks(n = 5)) +
   theme_minimal(base_size = 14) +
@@ -183,8 +193,9 @@ ggsave("../../figures/barplot_cumsum_no_publications_methods.png", width = 6, he
 # -----------------------------
 # Stacked bars for number of publications each year, broken down by method.
 coordinates %>%
+  mutate(year_published = suppressWarnings(as.integer(as.character(year_published)))) %>%  # ensure integer years
   filter(
-    year_published != "NA",
+    !is.na(year_published),
     TargetGroup != "Microorganisms",
     TargetTaxa != "Microorganisms"
   ) %>%
@@ -195,6 +206,7 @@ coordinates %>%
   ungroup() %>%
   ggplot(aes(x = year_published, y = n, fill = MolecularMethod)) +
   geom_bar(stat = "identity") +
+  scale_x_continuous(breaks = function(x) seq(floor(min(x, na.rm = TRUE)), ceiling(max(x, na.rm = TRUE)), by = 1)) +  # whole years only
   scale_y_continuous(breaks = pretty_breaks(n = 5)) +
   theme_test() +
   theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5)) +
@@ -265,8 +277,6 @@ coordinates %>%
   )
 
 ggsave("../../figures/barplot_N_mappers.png", width = 8, height = 5, dpi = 300)
-
-
 
 # -----------------------------
 # Color by SampleType and shape by TargetGroup
