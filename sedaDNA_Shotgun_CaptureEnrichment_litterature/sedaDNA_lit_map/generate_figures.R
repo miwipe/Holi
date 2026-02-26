@@ -316,6 +316,7 @@ okabe_ito_mod <- c(
   "#DA70D6", # orchid pink
   "#006D6F", # deep teal
   "#6A5ACD", # slate blue
+  "#C44E52",  # muted crimson
   "#556B2F"  # dark olive green
 )
 # Main plot
