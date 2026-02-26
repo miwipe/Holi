@@ -29,6 +29,8 @@ Our aim is for this resource to be continuously updated and valuable to the rese
 
 ![Worldmap of study sites in which ancient metagenomic data has been published](figures/SG_TE_map_method.png)
 
+![Worldmap of study sites in which ancient metagenomic data has been published categorized by sample type](figures/SG_TE_map_SampleType_Target.png)
+
 ![Bar plot of litterature published per year](figures/barplot_no_publications.png)
 
 ![Barplot of all litterature categorized and cumulative](figures/barplot_cumsum_no_publications_methods.png)
