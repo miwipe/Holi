@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script: Holi.sh
+# Script: holi_prefilter.sh
 # Description: Comprehensive automated pipeline for preprocessing, mapping, filtering, and taxonomic classification of FASTQ files.
 
 # -------------------------------
@@ -56,7 +56,7 @@ REQUIRED_TOOLS=(
   filterBAM
   unicorn
   metaDMG-cpp
-  )
+)
 
 echo "Checking required tools..."
 
@@ -79,8 +79,6 @@ else
   echo "All required tools found."
 fi
 
-
-
 # -------------------------------
 # Load config file
 # -------------------------------
@@ -98,7 +96,7 @@ load_config() {
     THREADSP=$(get_value "THREADSP")
     DB_PATH=$(get_value "DB_PATH")
     DB_PATH_clean=$(get_value "DB_PATH_clean")
-	TAX_PATH_NCBI=$(get_value "TAX_PATH_NCBI")
+    TAX_PATH_NCBI=$(get_value "TAX_PATH_NCBI")
     DB_PATH_Norwary=$(get_value "DB_PATH_Norwary")
     DB_PATH_bac=$(get_value "DB_PATH_bac")
     TAX_PATH_BAC=$(get_value "TAX_PATH_BAC")
@@ -107,13 +105,22 @@ load_config() {
     MICROB_OUT=$(get_value "MICROB_OUT")
     RESULT_PATH=$(get_value "RESULT_PATH")
     INPATH=$(get_value "INPATH")
-	EUK_OUT=$(get_value "EUK_OUT")
-	LOGS=$(get_value "LOGS")
+    EUK_OUT=$(get_value "EUK_OUT")
+    LOGS=$(get_value "LOGS")
+
+    # FIX: load TMP from config
+    TMP=$(get_value "TMP")
 }
 
 load_config "$CONFIG"
 echo "[INFO] Loaded config from $CONFIG"
 
+# FIX: ensure TMP exists and is used by Python tools (filterBAM, etc.)
+: "${TMP:=/tmp}"
+mkdir -p "$TMP" || { echo "[ERROR] Failed to create TMP dir: $TMP"; exit 1; }
+export TMPDIR="$TMP"
+export TEMP="$TMP"
+export TMP="$TMP"
 
 # -----------------------------
 # Logging function and success function - forces the pipeline to exit if something goes wrong
@@ -151,7 +158,7 @@ check_success() {
 # -----------------------------
 # Ensure essential output directories exist
 # -----------------------------
-REQUIRED_DIRS=("$RESULT_PATH" "$EUK_OUT" "$MICROB_OUT" "$LOGS")
+REQUIRED_DIRS=("$RESULT_PATH" "$EUK_OUT" "$MICROB_OUT" "$LOGS" "$TMP")
 
 for dir in "${REQUIRED_DIRS[@]}"; do
     if [ ! -d "$dir" ]; then
@@ -189,7 +196,6 @@ UNICORN=false
 # NEW: single-end mode
 SINGLE_END=false
 
-
 CONFIG="$1"
 SAMPLE_LIST="$2"
 shift 2
@@ -198,13 +204,13 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --single-end)              SINGLE_END=true ;;
     --skip-preprocessing)      SKIP_PREPROCESSING=true ;;
-	--skip-preprocessing-cleanup)	SKIP_PREPROCESSING_CLEANUP=true ;;
+    --skip-preprocessing-cleanup) SKIP_PREPROCESSING_CLEANUP=true ;;
     --skip-gtdb-mapping)       SKIP_GTDB_MAPPING=true ;;
-	--skip-gtdb-cleanup)       SKIP_GTDB_CLEANUP=true ;;
+    --skip-gtdb-cleanup)       SKIP_GTDB_CLEANUP=true ;;
     --skip-microbial-split)    SKIP_MICROBIAL_SPLIT=true ;;
     --skip-euk-mapping)        SKIP_EUK_MAPPING=true ;;
-	--skip-euk-cleanup)        SKIP_EUK_CLEANUP=true ;;
-	--skip-comp-merge)         SKIP_COMP_MERGE=true ;;
+    --skip-euk-cleanup)        SKIP_EUK_CLEANUP=true ;;
+    --skip-comp-merge)         SKIP_COMP_MERGE=true ;;
     --skip-bam-filtering)      SKIP_BAM_FILTERING=true ;;
     --skip-metadmg)            SKIP_METADMG=true ;;
     --skip-unicorn-tidstats)   SKIP_UNICORN_TIDSTATS=true ;;
@@ -214,7 +220,6 @@ while [[ $# -gt 0 ]]; do
   esac
   shift
 done
-
 
 # Check if config file exists and is not empty
 if [ ! -s "$CONFIG" ]; then
@@ -232,7 +237,6 @@ if [ ! -s "$SAMPLE_LIST" ]; then
     echo "[ERROR] Sample list file ($SAMPLE_LIST) is empty or does not exist." | tee -a "$LOG_FILE"
     exit 1
 fi
-
 
 if [ "$SKIP_PREPROCESSING" = false ]; then
     ####################### QC ##############################
@@ -354,10 +358,8 @@ if [ "$SKIP_PREPROCESSING_CLEANUP" = false ]; then
 
   check_success "Preprocessing cleanup"
 else
-  log_step "Skipping preprocessing cleanup (use --cleanup-preprocessing to enable)."
+  log_step "Skipping preprocessing cleanup (--skip-preprocessing-cleanup)."
 fi
-
-
 
 # -------------------------------
 # Step 1: Mapping against GTDB (7 chunks)
@@ -373,8 +375,8 @@ if [ "$SKIP_GTDB_MAPPING" = false ]; then
 
   log_step "Sorting GTDB BAM files..."
   cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "for bam in $MICROB_OUT/{}.gtdb.*.bam; do
-      sorted_bam=\$MICROB_OUT/$(basename \$bam .bam).sorted.bam;
-      samtools sort -@ $THREADS -m 4G -o \$sorted_bam \$bam;
+      sorted_bam=\$MICROB_OUT/\$(basename \"\$bam\" .bam).sorted.bam
+      samtools sort -@ $THREADS -m 4G -o \"\$sorted_bam\" \"\$bam\"
     done"
   check_success "Sorting GTDB BAM files"
 
@@ -390,196 +392,189 @@ fi
 # Cleanup per-chunk GTDB BAMs
 # ----------------------------
 if [ "$SKIP_GTDB_CLEANUP" = false ]; then
-	log_step "Cleaning GTDB chunk BAMs now that merged BAM exists..."
+    log_step "Cleaning GTDB chunk BAMs now that merged BAM exists..."
 
-	export MICROB_OUT LOGS
+    export MICROB_OUT LOGS
 
-	parallel -j "$THREADSP" --env MICROB_OUT --env LOGS '
-	  sample={};
-	  logfile="$LOGS/${sample}__cleanup_gtdb_bams.log";
-	  merged="$MICROB_OUT/${sample}.gtdb.merged.bam";
+    parallel -j "$THREADSP" --env MICROB_OUT --env LOGS '
+      sample={};
+      logfile="$LOGS/${sample}__cleanup_gtdb_bams.log";
+      merged="$MICROB_OUT/${sample}.gtdb.merged.bam";
 
-	  if [ ! -s "$merged" ]; then
-	    echo "[SKIP] Missing/empty merged BAM: $merged" > "$logfile";
-	    exit 0
-	  fi
+      if [ ! -s "$merged" ]; then
+        echo "[SKIP] Missing/empty merged BAM: $merged" > "$logfile";
+        exit 0
+      fi
 
-	  # Delete:
-	  #   sample.gtdb.<n>.bam
-	  #   sample.gtdb.<n>.sorted.bam
-	  # Keep:
-	  #   sample.gtdb.merged.bam
-	  candidates=$(find "$MICROB_OUT" -maxdepth 1 -type f \
-	    \( -name "${sample}.gtdb.[1-7].bam" \
-	       -o -name "${sample}.gtdb.[1-7].bam.sorted.bam" \
-	    \) \
-	    ! -name "${sample}.gtdb.merged.bam" \
-	  )
+      candidates=$(find "$MICROB_OUT" -maxdepth 1 -type f \
+        \( -name "${sample}.gtdb.[1-7].bam" \
+           -o -name "${sample}.gtdb.[1-7].sorted.bam" \
+        \) \
+        ! -name "${sample}.gtdb.merged.bam" \
+      )
 
-	  if [ -z "$candidates" ]; then
-	    echo "[INFO] No GTDB chunk BAMs found to delete for $sample" > "$logfile"
-	    exit 0
-	  fi
+      if [ -z "$candidates" ]; then
+        echo "[INFO] No GTDB chunk BAMs found to delete for $sample" > "$logfile"
+        exit 0
+      fi
 
-	  echo "$candidates" | wc -l | awk "{print \"[INFO] Deleting \" \$1 \" files for $sample\"}" > "$logfile"
-	  echo "$candidates" >> "$logfile"
+      echo "$candidates" | wc -l | awk "{print \"[INFO] Deleting \" \$1 \" files for $sample\"}" > "$logfile"
+      echo "$candidates" >> "$logfile"
 
-	  echo "$candidates" | xargs -r rm -f
+      echo "$candidates" | xargs -r rm -f
 
-	  echo "[INFO] Cleanup done for $sample" >> "$logfile"
-	' :::: "$SAMPLE_LIST"
+      echo "[INFO] Cleanup done for $sample" >> "$logfile"
+    ' :::: "$SAMPLE_LIST"
 
-	check_success "GTDB chunk BAM cleanup"
+    check_success "GTDB chunk BAM cleanup"
 else
-	log_step "Skipping GTDB BAM cleanup (use --cleanup-gtdb-bams to enable)."
+    log_step "Skipping GTDB BAM cleanup (--skip-gtdb-cleanup)."
 fi
-
-
 
 if [ "$SKIP_MICROBIAL_SPLIT" = false ]; then
 
-	if [ "$LCA_ASSIGN" = true ]; then
+    if [ "$LCA_ASSIGN" = true ]; then
 
-	    log_step "Sorting merged BAM file for metaDMG..."
-	    parallel -j "$THREADSP" "\
-	        samtools sort -n -@ $THREADS -m 10G \
-	            -o $MICROB_OUT/{}.gtdb.merged.sorted.bam \
-	               $MICROB_OUT/{}.gtdb.merged.bam \
-	        > $LOGS/{}__sortbam.log 2>&1" \
-	        :::: "$SAMPLE_LIST"
-	    check_success "Sorting BAM file"
+        log_step "Sorting merged BAM file for metaDMG..."
+        parallel -j "$THREADSP" "\
+            samtools sort -n -@ $THREADS -m 10G \
+                -o $MICROB_OUT/{}.gtdb.merged.sorted.bam \
+                   $MICROB_OUT/{}.gtdb.merged.bam \
+            > $LOGS/{}__sortbam.log 2>&1" \
+            :::: "$SAMPLE_LIST"
+        check_success "Sorting BAM file"
 
-	    log_step "Running metaDMG LCA assignment..."
-	    parallel -j "$THREADSP" "\
-	        /projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp lca \
-	            --names $TAX_PATH_BAC/names.dmp \
-	            --nodes $TAX_PATH_BAC/nodes.dmp \
-	            --acc2tax $TAX_PATH_BAC_ACC/hires-organelles-viruses-smags.acc2taxid.gz \
-	            --sim_score_low 0.92 \
-	            --sim_score_high 1.0 \
-	            --how_many 15 \
-	            --weight_type 1 \
-	            --fix_ncbi 0 \
-	            --threads 10 \
-	            --bam $MICROB_OUT/{}.gtdb.merged.sorted.bam \
-	            --out_prefix $MICROB_OUT/{} \
-	        > $LOGS/{}__metadmg.log 2>&1" \
-	        :::: "$SAMPLE_LIST"
-	    check_success "metaDMG LCA assignment"
+        log_step "Running metaDMG LCA assignment..."
+        parallel -j "$THREADSP" "\
+            /projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp lca \
+                --names $TAX_PATH_BAC/names.dmp \
+                --nodes $TAX_PATH_BAC/nodes.dmp \
+                --acc2tax $TAX_PATH_BAC_ACC/hires-organelles-viruses-smags.acc2taxid.gz \
+                --sim_score_low 0.92 \
+                --sim_score_high 1.0 \
+                --how_many 15 \
+                --weight_type 1 \
+                --fix_ncbi 0 \
+                --threads 10 \
+                --bam $MICROB_OUT/{}.gtdb.merged.sorted.bam \
+                --out_prefix $MICROB_OUT/{} \
+            > $LOGS/{}__metadmg.log 2>&1" \
+            :::: "$SAMPLE_LIST"
+        check_success "metaDMG LCA assignment"
 
-	    log_step "Extracting bacterial/archaeal/viral reads..."
-	    parallel -j "$THREADSP" "\
-	        zgrep -i -E 'Archaea|virus|bacteria' \
-	            $MICROB_OUT/{}.lca.gz \
-	            | cut -f1 \
-	            > $MICROB_OUT/{}.bact_reads.txt \
-	        2> $LOGS/{}__extract_bact.log" \
-	        :::: "$SAMPLE_LIST"
-	    check_success "Extracting reads"
+        log_step "Extracting bacterial/archaeal/viral reads..."
+        parallel -j "$THREADSP" "\
+            zgrep -i -E 'Archaea|virus|bacteria' \
+                $MICROB_OUT/{}.lca.gz \
+                | cut -f1 \
+                > $MICROB_OUT/{}.bact_reads.txt \
+            2> $LOGS/{}__extract_bact.log" \
+            :::: "$SAMPLE_LIST"
+        check_success "Extracting reads"
 
-	    log_step "Subsetting FASTQ for bacterial reads..."
-	    parallel -j "$THREADSP" "\
-	        seqtk subseq {}.ppm.vs.d4.fq.gz \
-	            $MICROB_OUT/{}.bact_reads.txt \
-	            | gzip > $MICROB_OUT/{}.bact_reads.fq.gz \
-	        2> $LOGS/{}__seqtk_bact.log" \
-	        :::: "$SAMPLE_LIST"
-	    check_success "Subsetting bacterial reads"
+        log_step "Subsetting FASTQ for bacterial reads..."
+        parallel -j "$THREADSP" "\
+            seqtk subseq {}.ppm.vs.d4.fq.gz \
+                $MICROB_OUT/{}.bact_reads.txt \
+                | gzip > $MICROB_OUT/{}.bact_reads.fq.gz \
+            2> $LOGS/{}__seqtk_bact.log" \
+            :::: "$SAMPLE_LIST"
+        check_success "Subsetting bacterial reads"
 
-	    log_step "Extracting all read IDs..."
-	    parallel -j "$THREADSP" "\
-	        zcat {}.ppm.vs.d4.fq.gz \
-	            | awk 'NR%4==1 {print substr(\$0, 2)}' \
-	            > $MICROB_OUT/{}.all_reads.txt \
-	        2> $LOGS/{}__allreads.log" \
-	        :::: "$SAMPLE_LIST"
-	    check_success "Extracting all read IDs"
+        log_step "Extracting all read IDs..."
+        parallel -j "$THREADSP" "\
+            zcat {}.ppm.vs.d4.fq.gz \
+                | awk 'NR%4==1 {print substr(\$0, 2)}' \
+                > $MICROB_OUT/{}.all_reads.txt \
+            2> $LOGS/{}__allreads.log" \
+            :::: "$SAMPLE_LIST"
+        check_success "Extracting all read IDs"
 
-	    log_step "Computing eukaryotic read set..."
-	    parallel -j "$THREADSP" "\
-	        comm -23 <(sort $MICROB_OUT/{}.all_reads.txt) \
-	                 <(sort $MICROB_OUT/{}.bact_reads.txt) \
-	            > $EUK_OUT/{}.euk_reads.txt \
-	        2> $LOGS/{}__comm_euk.log" \
-	        :::: "$SAMPLE_LIST"
-	    check_success "Generating eukaryotic read list"
+        log_step "Computing eukaryotic read set..."
+        parallel --shell /bin/bash -j "$THREADSP" "\
+            comm -23 <(sort $MICROB_OUT/{}.all_reads.txt) \
+                     <(sort $MICROB_OUT/{}.bact_reads.txt) \
+                > $EUK_OUT/{}.euk_reads.txt \
+            2> $LOGS/{}__comm_euk.log" \
+            :::: "$SAMPLE_LIST"
+        check_success "Generating eukaryotic read list"
 
-	    log_step "Extracting eukaryotic reads..."
-	    parallel -j "$THREADSP" "\
-	        seqtk subseq {}.ppm.vs.d4.fq.gz \
-	            $EUK_OUT/{}.euk_reads.txt \
-	            | gzip > $EUK_OUT/{}.euk.fastq.gz \
-	        2> $LOGS/{}__seqtk_euk.log" \
-	        :::: "$SAMPLE_LIST"
-	    check_success "Extracting eukaryotic FASTQ"
+        log_step "Extracting eukaryotic reads..."
+        parallel -j "$THREADSP" "\
+            seqtk subseq {}.ppm.vs.d4.fq.gz \
+                $EUK_OUT/{}.euk_reads.txt \
+                | gzip > $EUK_OUT/{}.euk.fastq.gz \
+            2> $LOGS/{}__seqtk_euk.log" \
+            :::: "$SAMPLE_LIST"
+        check_success "Extracting eukaryotic FASTQ"
 
-	else
+    else
 
-	    log_step "Running getRTax classification..."
-	    parallel -j "$THREADSP" "\
-	        getRTax \
-	            --bam $MICROB_OUT/{}.gtdb.merged.bam \
-	            -T $TAX_PATH_BAC/taxid.map \
-	            -r '{\"domain\":[\"d__Bacteria\", \"d__Archaea\", \"d__Viruses\"]}' \
-	            --threads 8 \
-	            --unique \
-	            --only-read-ids \
-	            -p $MICROB_OUT/{}.bact_reads.txt \
-	        > $LOGS/{}__getRTax.log 2>&1" \
-	        :::: "$SAMPLE_LIST"
-	    check_success "getRTax classification"
+        log_step "Running getRTax classification..."
+        parallel -j "$THREADSP" "\
+            getRTax \
+                --bam $MICROB_OUT/{}.gtdb.merged.bam \
+                -T $TAX_PATH_BAC/taxid.map \
+                -r '{\"domain\":[\"d__Bacteria\", \"d__Archaea\", \"d__Viruses\"]}' \
+                --threads 8 \
+                --unique \
+                --only-read-ids \
+                -p $MICROB_OUT/{}.bact_reads.txt \
+            > $LOGS/{}__getRTax.log 2>&1" \
+            :::: "$SAMPLE_LIST"
+        check_success "getRTax classification"
 
-	    log_step "Merging bacterial read ID files..."
-	    parallel -j "$THREADSP" "\
-	        zcat $MICROB_OUT/{}.bact_reads.txt* \
-	            > $MICROB_OUT/{}.bact_reads_all.txt \
-	        2> $LOGS/{}__merge_bact.log" \
-	        :::: "$SAMPLE_LIST"
-	    check_success "Merging bacterial ID files"
+        log_step "Merging bacterial read ID files..."
+        parallel -j "$THREADSP" "\
+            zcat $MICROB_OUT/{}.bact_reads.txt* \
+                > $MICROB_OUT/{}.bact_reads_all.txt \
+            2> $LOGS/{}__merge_bact.log" \
+            :::: "$SAMPLE_LIST"
+        check_success "Merging bacterial ID files"
 
-	    log_step "Subsetting bacterial reads..."
-	    parallel -j "$THREADSP" "\
-	        seqtk subseq {}.ppm.vs.d4.fq.gz \
-	            $MICROB_OUT/{}.bact_reads_all.txt \
-	            | gzip > $MICROB_OUT/{}.bact_reads.fq.gz \
-	        2> $LOGS/{}__seqtk_bact.log" \
-	        :::: "$SAMPLE_LIST"
-	    check_success "Extracting bacterial FASTQ"
+        log_step "Subsetting bacterial reads..."
+        parallel -j "$THREADSP" "\
+            seqtk subseq {}.ppm.vs.d4.fq.gz \
+                $MICROB_OUT/{}.bact_reads_all.txt \
+                | gzip > $MICROB_OUT/{}.bact_reads.fq.gz \
+            2> $LOGS/{}__seqtk_bact.log" \
+            :::: "$SAMPLE_LIST"
+        check_success "Extracting bacterial FASTQ"
 
-	    log_step "Extracting all read IDs..."
-	    parallel -j "$THREADSP" "\
-	        zcat {}.ppm.vs.d4.fq.gz \
-	            | awk 'NR%4==1 {split(substr(\$0, 2), a, \" \"); print a[1]}' \
-	            > $MICROB_OUT/{}.all_reads.txt \
-	        2> $LOGS/{}__allreads.log" \
-	        :::: "$SAMPLE_LIST"
-	    check_success "Extracting all read IDs"
+        log_step "Extracting all read IDs..."
+        parallel -j "$THREADSP" "\
+            zcat {}.ppm.vs.d4.fq.gz \
+                | awk 'NR%4==1 {split(substr(\$0, 2), a, \" \"); print a[1]}' \
+                > $MICROB_OUT/{}.all_reads.txt \
+            2> $LOGS/{}__allreads.log" \
+            :::: "$SAMPLE_LIST"
+        check_success "Extracting all read IDs"
 
-	    log_step "Sorting read lists..."
-	    parallel -j "$THREADSP" "sort $MICROB_OUT/{}.all_reads.txt > $MICROB_OUT/{}.all_reads.sorted.txt" :::: "$SAMPLE_LIST"
-	    parallel -j "$THREADSP" "sort $MICROB_OUT/{}.bact_reads_all.txt > $MICROB_OUT/{}.bact_reads_all.sorted.txt" :::: "$SAMPLE_LIST"
-	    check_success "Sorting"
+        log_step "Sorting read lists..."
+        parallel -j "$THREADSP" "sort $MICROB_OUT/{}.all_reads.txt > $MICROB_OUT/{}.all_reads.sorted.txt" :::: "$SAMPLE_LIST"
+        parallel -j "$THREADSP" "sort $MICROB_OUT/{}.bact_reads_all.txt > $MICROB_OUT/{}.bact_reads_all.sorted.txt" :::: "$SAMPLE_LIST"
+        check_success "Sorting"
 
-	    log_step "Computing euk read list..."
-	    parallel -j "$THREADSP" "\
-	        comm -23 \
-	            $MICROB_OUT/{}.all_reads.sorted.txt \
-	            $MICROB_OUT/{}.bact_reads_all.sorted.txt \
-	            > $EUK_OUT/{}.euk_reads.txt \
-	        2> $LOGS/{}__comm_euk.log" \
-	        :::: "$SAMPLE_LIST"
-	    check_success "Eukaryotic read list"
+        log_step "Computing euk read list..."
+        parallel -j "$THREADSP" "\
+            comm -23 \
+                $MICROB_OUT/{}.all_reads.sorted.txt \
+                $MICROB_OUT/{}.bact_reads_all.sorted.txt \
+                > $EUK_OUT/{}.euk_reads.txt \
+            2> $LOGS/{}__comm_euk.log" \
+            :::: "$SAMPLE_LIST"
+        check_success "Eukaryotic read list"
 
-	    log_step "Extracting euk FASTQ..."
-	    parallel -j "$THREADSP" "\
-	        seqtk subseq {}.ppm.vs.d4.fq.gz \
-	            $EUK_OUT/{}.euk_reads.txt \
-	            | gzip > $EUK_OUT/{}.euk.fastq.gz \
-	        2> $LOGS/{}__seqtk_euk.log" \
-	        :::: "$SAMPLE_LIST"
-	    check_success "Extracting eukaryotic FASTQ"
+        log_step "Extracting euk FASTQ..."
+        parallel -j "$THREADSP" "\
+            seqtk subseq {}.ppm.vs.d4.fq.gz \
+                $EUK_OUT/{}.euk_reads.txt \
+                | gzip > $EUK_OUT/{}.euk.fastq.gz \
+            2> $LOGS/{}__seqtk_euk.log" \
+            :::: "$SAMPLE_LIST"
+        check_success "Extracting eukaryotic FASTQ"
 
-	fi
+    fi
 else
   log_step "Skipping microbial read splitting as requested."
 fi
@@ -589,73 +584,68 @@ fi
 # ----------------------------------------------
 if [ "$SKIP_EUK_MAPPING" = false ]; then
 
-	log_step "Mapping reads to eukaryote database (129 parts) with bowtie2..."
-	for db in {1..129}; do
-	    parallel -j "$THREADSP" "\
-	        bowtie2 --threads $THREADS -k 1000 -t \
-	            -x $DB_PATH.$db.fas.gz \
-	            -U $EUK_OUT/{}.euk.fastq.gz \
-	            --no-unal --mm -t 2> $LOGS/{}__eukmap_part_${db}.log \
-	        | samtools view -bS - \
-	            > $EUK_OUT/{}.euk.$db.bam" \
-	        :::: "$SAMPLE_LIST"
+    log_step "Mapping reads to eukaryote database (129 parts) with bowtie2..."
+    for db in {1..129}; do
+        parallel -j "$THREADSP" "\
+            bowtie2 --threads $THREADS -k 1000 -t \
+                -x $DB_PATH.$db.fas.gz \
+                -U $EUK_OUT/{}.euk.fastq.gz \
+                --no-unal --mm -t 2> $LOGS/{}__eukmap_part_${db}.log \
+            | samtools view -bS - \
+                > $EUK_OUT/{}.euk.$db.bam" \
+            :::: "$SAMPLE_LIST"
 
-	    check_success "Mapping to eukaryote database part $db"
-	done
+        check_success "Mapping to eukaryote database part $db"
+    done
 
+    log_step "Mapping reads to mitochondrion database with bowtie2..."
+    parallel -j "$THREADSP" "\
+        bowtie2 --threads $THREADS -k 1000 -t \
+            -x $DB_PATH_clean/refseq_mitochondrion.genomic.fas.gz \
+            -U $EUK_OUT/{}.euk.fastq.gz \
+            --no-unal --mm -t 2> $LOGS/{}__mitochondrion.log \
+        | samtools view -bS - \
+            > $EUK_OUT/{}.mito.bam" \
+        :::: "$SAMPLE_LIST"
+    check_success "Mapping to mitochondrion database"
 
-	log_step "Mapping reads to mitochondrion database with bowtie2..."
-	parallel -j "$THREADSP" "\
-	    bowtie2 --threads $THREADS -k 1000 -t \
-	        -x $DB_PATH_clean/refseq_mitochondrion.genomic.fas.gz \
-	        -U $EUK_OUT/{}.euk.fastq.gz \
-	        --no-unal --mm -t 2> $LOGS/{}__mitochondrion.log \
-	    | samtools view -bS - \
-	        > $EUK_OUT/{}.mito.bam" \
-	    :::: "$SAMPLE_LIST"
-	check_success "Mapping to mitochondrion database"
+    log_step "Mapping reads to phylonorwary database (10 parts) with bowtie2..."
+    for db in {1..10}; do
+        parallel -j "$THREADSP" "\
+            bowtie2 --threads $THREADS -k 1000 -t \
+                -x $DB_PATH_Norwary.$db-of-10 \
+                -U $EUK_OUT/{}.euk.fastq.gz \
+                --no-unal --mm -t 2> $LOGS/{}__phynor_part_${db}.log \
+            | samtools view -bS - \
+                > $EUK_OUT/{}.phyNor.$db.bam" \
+            :::: "$SAMPLE_LIST"
 
+        check_success "Mapping to phylonorwary database part $db"
+    done
 
-	log_step "Mapping reads to phylonorwary database (10 parts) with bowtie2..."
-	for db in {1..10}; do
-	    parallel -j "$THREADSP" "\
-	        bowtie2 --threads $THREADS -k 1000 -t \
-	            -x $DB_PATH_Norwary.$db-of-10 \
-	            -U $EUK_OUT/{}.euk.fastq.gz \
-	            --no-unal --mm -t 2> $LOGS/{}__phynor_part_${db}.log \
-	        | samtools view -bS - \
-	            > $EUK_OUT/{}.phyNor.$db.bam" \
-	        :::: "$SAMPLE_LIST"
+    log_step "Mapping reads to core NT database with bowtie2..."
+    parallel -j "$THREADSP" "\
+        bowtie2 --threads $THREADS -k 1000 -t \
+            -x $DB_PATH_clean/core_nt.fas.gz \
+            -U $EUK_OUT/{}.euk.fastq.gz \
+            --no-unal --mm -t 2> $LOGS/{}__core_nt.log \
+        | samtools view -bS - \
+            > $EUK_OUT/{}.core_nt.bam" \
+        :::: "$SAMPLE_LIST"
+    check_success "Mapping to core NT database"
 
-	    check_success "Mapping to phylonorwary database part $db"
-	done
+    log_step "Mapping reads to plastid database with bowtie2..."
+    parallel -j "$THREADSP" "\
+        bowtie2 --threads $THREADS -k 1000 -t \
+            -x $DB_PATH_clean/refseq_plastid.genomic.fas.gz \
+            -U $EUK_OUT/{}.euk.fastq.gz \
+            --no-unal --mm -t 2> $LOGS/{}__plastid.log \
+        | samtools view -bS - \
+            > $EUK_OUT/{}.pla.bam" \
+        :::: "$SAMPLE_LIST"
+    check_success "Mapping to plastid database"
 
-
-	log_step "Mapping reads to core NT database with bowtie2..."
-	parallel -j "$THREADSP" "\
-	    bowtie2 --threads $THREADS -k 1000 -t \
-	        -x $DB_PATH_clean/core_nt.fas.gz \
-	        -U $EUK_OUT/{}.euk.fastq.gz \
-	        --no-unal --mm -t 2> $LOGS/{}__core_nt.log \
-	    | samtools view -bS - \
-	        > $EUK_OUT/{}.core_nt.bam" \
-	    :::: "$SAMPLE_LIST"
-	check_success "Mapping to core NT database"
-
-
-	log_step "Mapping reads to plastid database with bowtie2..."
-	parallel -j "$THREADSP" "\
-	    bowtie2 --threads $THREADS -k 1000 -t \
-	        -x $DB_PATH_clean/refseq_plastid.genomic.fas.gz \
-	        -U $EUK_OUT/{}.euk.fastq.gz \
-	        --no-unal --mm -t 2> $LOGS/{}__plastid.log \
-	    | samtools view -bS - \
-	        > $EUK_OUT/{}.pla.bam" \
-	    :::: "$SAMPLE_LIST"
-	check_success "Mapping to plastid database"
-
-
-	log_step "Mapping finished. Continuing with merging..."
+    log_step "Mapping finished. Continuing with merging..."
 else
   log_step "Skipping eukaryotic mapping as requested."
 fi
@@ -665,75 +655,71 @@ fi
 # ------------------------------------
 
 if [ "$SKIP_COMP_MERGE" = false ]; then
-	# --- Compress BAM files using metaDMG ---
-	log_step "Compressing BAM files using metaDMG..."
+    # --- Compress BAM files using metaDMG ---
+    log_step "Compressing BAM files using metaDMG..."
 
-	export EUK_OUT THREADS THREADSP LOGS
+    export EUK_OUT THREADS THREADSP LOGS
 
-	parallel -j "$THREADSP" --env EUK_OUT --env LOGS '
-	  sample={};
+    parallel -j "$THREADSP" --env EUK_OUT --env LOGS '
+      sample={};
 
-	  # Find raw BAMs for this sample
-	  find "$EUK_OUT" -type f -name "${sample}*.bam" \
-	    | grep -E "${sample}\.(euk|mito|pla|phyNor|core_nt)(\.[0-9]+)?\.bam$" \
-	    | grep -vE "sorted|comp|merged" \
-	    | while read -r bam; do
+      # Find raw BAMs for this sample
+      find "$EUK_OUT" -type f -name "${sample}*.bam" \
+        | grep -E "${sample}\.(euk|mito|pla|phyNor|core_nt)(\.[0-9]+)?\.bam$" \
+        | grep -vE "sorted|comp|merged" \
+        | while read -r bam; do
 
-	        base=$(basename "$bam" .bam)
-	        dir=$(dirname "$bam")
-	        outpath="$dir/${base}.comp.bam"
+            base=$(basename "$bam" .bam)
+            dir=$(dirname "$bam")
+            outpath="$dir/${base}.comp.bam"
 
-	        /projects/wintherpedersen/apps/metaDMG_14jun24/metaDMG-cpp/misc/compressbam \
-	          --threads 12 \
-	          --input "$bam" \
-	          --output "$outpath" \
-	          > "$LOGS/${sample}__compressbam.log" 2>&1
+            /projects/wintherpedersen/apps/metaDMG_14jun24/metaDMG-cpp/misc/compressbam \
+              --threads 12 \
+              --input "$bam" \
+              --output "$outpath" \
+              > "$LOGS/${sample}__compressbam.log" 2>&1
 
-	      done
-	' :::: "$SAMPLE_LIST"
+          done
+    ' :::: "$SAMPLE_LIST"
 
-	check_success "Compressing BAM files"
+    check_success "Compressing BAM files"
 
+    log_step "Sorting each BAM file before merging..."
 
-	log_step "Sorting each BAM file before merging..."
+    parallel -j "$THREADSP" --env EUK_OUT --env THREADS --env LOGS '
+      sample={};
 
-	parallel -j "$THREADSP" --env EUK_OUT --env THREADS --env LOGS '
-	  sample={};
+      find "$EUK_OUT" -type f -name "${sample}*.comp.bam" \
+        | while read -r bam; do
 
-	  find "$EUK_OUT" -type f -name "${sample}*.comp.bam" \
-	    | while read -r bam; do
+            base=$(basename "$bam" .bam)
+            dir=$(dirname "$bam")
+            sorted_bam="$dir/${base}.sorted.bam"
 
-	        base=$(basename "$bam" .bam)
-	        dir=$(dirname "$bam")
-	        sorted_bam="$dir/${base}.sorted.bam"
+            samtools sort -n -@ "$THREADS" -m 4G -o "$sorted_bam" "$bam" \
+              > "$LOGS/${sample}__sort_comp.log" 2>&1
 
-	        samtools sort -n -@ "$THREADS" -m 4G -o "$sorted_bam" "$bam" \
-	          > "$LOGS/${sample}__sort_comp.log" 2>&1
+          done
+    ' :::: "$SAMPLE_LIST"
 
-	      done
-	' :::: "$SAMPLE_LIST"
+    check_success "Bam files sorted"
 
-	check_success "Bam files sorted"
+    # --- Merge ---
+    log_step "Merging all sorted BAM files..."
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
+      "samtools merge -@ $THREADS -n -f \
+         $EUK_OUT/{}.comp.sam.gz $EUK_OUT/{}*.comp.sorted.bam"
+    check_success "Merging BAM files to sam.gz"
 
-
-
-	# --- Merge ---
-	log_step "Merging all sorted BAM files..."
-	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-	  "samtools merge -@ $THREADS -n -f \
-	     $EUK_OUT/{}.comp.sam.gz $EUK_OUT/{}*.comp.sorted.bam"
-	check_success "Merging BAM files to sam.gz"
-
-
-	# --- Compress merged SAM to BAM ---
-	log_step "Compress bam..."
-	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-	  "/projects/wintherpedersen/apps/metaDMG_14jun24/metaDMG-cpp/misc/compressbam \
-	     --threads 12 \
-	     --input $EUK_OUT/{}.comp.sam.gz \
-	     --output $EUK_OUT/{}.comp.bam \
-	     > $LOGS/{}__compress_merged.log 2>&1"
-	check_success "merged sam.gz files with compress bam"
+    # --- Compress merged SAM to BAM ---
+    log_step "Compress bam..."
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
+      "/projects/wintherpedersen/apps/metaDMG_14jun24/metaDMG-cpp/misc/compressbam \
+         --threads 12 \
+         --input $EUK_OUT/{}.comp.sam.gz \
+         --output $EUK_OUT/{}.comp.bam \
+         > $LOGS/{}__compress_merged.log 2>&1"
+    check_success "merged sam.gz files with compress bam"
 else
   log_step "Skipping compress/sort/merge stage (--skip-comp-merge). Expecting $EUK_OUT/<sample>.comp.bam to already exist."
 fi
@@ -761,53 +747,40 @@ if [ "$SKIP_EUK_CLEANUP" = false ]; then
     sample={};
     logfile="$LOGS/${sample}__cleanup_mapping_bams.log";
 
-    # Only cleanup if final merged comp.bam exists and is non-empty
     merged="$EUK_OUT/${sample}.comp.bam";
     if [ ! -s "$merged" ]; then
       echo "[SKIP] merged comp.bam missing: $merged" > "$logfile";
       exit 0
     fi
 
-    # Patterns to remove:
-    #   sample.euk.<N>.bam, sample.core_nt.bam, sample.phyNor.<N>.bam, sample.mito.bam, sample.pla.bam
-    # plus their intermediate derivatives produced by your compress/sort stage:
-    #   *.comp.bam, *.comp.sorted.bam (NOT the merged ${sample}.comp.bam)
-    #
-    # We explicitly exclude:
-    #   ${sample}.comp.bam (keep)
-    #   ${sample}.comp.filtered*.bam (keep)
-    #   ${sample}.sort.comp*.bam (keep)
-    #
-    # Build candidate list safely
-	candidates=$(find "$EUK_OUT" -maxdepth 1 -type f \
-	  \( -name "${sample}.euk.*.bam" \
-	     -o -name "${sample}.core_nt.bam" \
-	     -o -name "${sample}.phyNor.*.bam" \
-	     -o -name "${sample}.mito.bam" \
-	     -o -name "${sample}.pla.bam" \
-	     -o -name "${sample}.euk.*.comp.bam" \
-	     -o -name "${sample}.core_nt.comp.bam" \
-	     -o -name "${sample}.phyNor.*.comp.bam" \
-	     -o -name "${sample}.mito.comp.bam" \
-	     -o -name "${sample}.pla.comp.bam" \
-	     -o -name "${sample}.euk.*.comp.sorted.bam" \
-	     -o -name "${sample}.core_nt.comp.sorted.bam" \
-	     -o -name "${sample}.phyNor.*.comp.sorted.bam" \
-	     -o -name "${sample}.mito.comp.sorted.bam" \
-	     -o -name "${sample}.pla.comp.sorted.bam" \
-	     -o -name "${sample}.comp.sam.gz" \
-	  \) \
-	  ! -name "${sample}.comp.bam" \
-	  ! -name "${sample}.comp.filtered*.bam" \
-	  ! -name "${sample}.sort.comp*.bam" \
-	)
-    
+    candidates=$(find "$EUK_OUT" -maxdepth 1 -type f \
+      \( -name "${sample}.euk.*.bam" \
+         -o -name "${sample}.core_nt.bam" \
+         -o -name "${sample}.phyNor.*.bam" \
+         -o -name "${sample}.mito.bam" \
+         -o -name "${sample}.pla.bam" \
+         -o -name "${sample}.euk.*.comp.bam" \
+         -o -name "${sample}.core_nt.comp.bam" \
+         -o -name "${sample}.phyNor.*.comp.bam" \
+         -o -name "${sample}.mito.comp.bam" \
+         -o -name "${sample}.pla.comp.bam" \
+         -o -name "${sample}.euk.*.comp.sorted.bam" \
+         -o -name "${sample}.core_nt.comp.sorted.bam" \
+         -o -name "${sample}.phyNor.*.comp.sorted.bam" \
+         -o -name "${sample}.mito.comp.sorted.bam" \
+         -o -name "${sample}.pla.comp.sorted.bam" \
+         -o -name "${sample}.comp.sam.gz" \
+      \) \
+      ! -name "${sample}.comp.bam" \
+      ! -name "${sample}.comp.filtered*.bam" \
+      ! -name "${sample}.sort.comp*.bam" \
+    )
+
     if [ -z "$candidates" ]; then
       echo "[INFO] No mapping intermediates found to delete for $sample" > "$logfile"
       exit 0
     fi
 
-    # Delete
     echo "$candidates" | wc -l | awk "{print \"[INFO] Deleting \" \$1 \" files for $sample\"}" > "$logfile"
     echo "$candidates" >> "$logfile"
 
@@ -818,145 +791,136 @@ if [ "$SKIP_EUK_CLEANUP" = false ]; then
 
   check_success "Cleanup of mapping intermediates"
 else
-  log_step "Skipping mapping-intermediate cleanup (use --cleanup-mapping-bams to enable)."
+  log_step "Skipping mapping-intermediate cleanup (--skip-euk-cleanup)."
 fi
-
 
 # --- Unicorn or filterBAM ---
 if [ "$SKIP_BAM_FILTERING" = false ]; then
-	if [ "$UNICORN" = true ]; then
-    
+    if [ "$UNICORN" = true ]; then
 
-		log_step "Running unicorn filter..."
+        log_step "Running unicorn filter..."
 
-		export EUK_OUT LOGS TAX_PATH_NCBI THREADS
+        export EUK_OUT LOGS TAX_PATH_NCBI THREADS
 
-		cat "$SAMPLE_LIST" | parallel -j 1 '
-		  sample={};
-		  outbam="$EUK_OUT/${sample}.comp.filtered.bam";
-		  outstat="$EUK_OUT/${sample}.comp.filtered.unicorn.refstats";
-		  logfile="$LOGS/${sample}__unicorn_refstats.log";
+        cat "$SAMPLE_LIST" | parallel -j 1 '
+          sample={};
+          outbam="$EUK_OUT/${sample}.comp.filtered.bam";
+          outstat="$EUK_OUT/${sample}.comp.filtered.unicorn.refstats";
+          logfile="$LOGS/${sample}__unicorn_refstats.log";
 
-		  if [[ -s "$outbam" && -s "$outstat" ]]; then
-		    echo "[SKIP] $sample: outputs exist and are non-empty" > "$logfile"
-		  else
-		    /projects/wintherpedersen/apps/unicorn/unicorn refstats \
-		      -b "$EUK_OUT/${sample}.comp.bam" \
-		      -t "$THREADS" --minreads 3 \
-		      --outbam "$outbam" \
-		      --outstat "$outstat" \
-		      --names "$TAX_PATH_NCBI/taxdump/names.dmp" \
-		      --nodes "$TAX_PATH_NCBI/taxdump/nodes.dmp" \
-		      > "$logfile" 2>&1
-		  fi
-		'
+          if [[ -s "$outbam" && -s "$outstat" ]]; then
+            echo "[SKIP] $sample: outputs exist and are non-empty" > "$logfile"
+          else
+            /projects/wintherpedersen/apps/unicorn/unicorn refstats \
+              -b "$EUK_OUT/${sample}.comp.bam" \
+              -t "$THREADS" --minreads 3 \
+              --outbam "$outbam" \
+              --outstat "$outstat" \
+              --names "$TAX_PATH_NCBI/taxdump/names.dmp" \
+              --nodes "$TAX_PATH_NCBI/taxdump/nodes.dmp" \
+              > "$logfile" 2>&1
+          fi
+        '
 
-		check_success "Unicorn refstats final filtering"
-    
-	
-	    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-	      "/projects/wintherpedersen/apps/unicorn/unicorn bamstats \
-	        -b $EUK_OUT/{}.comp.unicorn.bam \
-	        -t $THREADS \
-	        --outbam $EUK_OUT/{}.comp.filtered.bam \
-	        --outstat $EUK_OUT/{}.comp.filtered.unicorn.bamstats \
-	        --printdists $EUK_OUT/{}.comp.filtered.unicorn \
-	        > $LOGS/{}__unicorn_bamstats.log 2>&1"
-	    check_success "Unicorn bamstats final filtering"
+        check_success "Unicorn refstats final filtering"
 
-	else
-	
-	    log_step "Sorting merged BAM file for bamfilter..."
-	    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-	      "samtools sort -@ $THREADS -m 10G \
-	         -o $EUK_OUT/{}.sort.comp.bam \
-	            $EUK_OUT/{}.comp.bam"
-	    check_success "Sorting BAM file"
-    
-	    log_step "Final filtering with filterBAM..."
-	    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-	      "filterBAM filter \
-	        -m 8G -t 12 -n 3 -A 92 -a 95 -N \
-	        --bam $EUK_OUT/{}.sort.comp.bam \
-	        --stats $EUK_OUT/{}.comp.stats.tsv.gz \
-	        --stats-filtered $EUK_OUT/{}.comp.stats-filtered.tsv.gz \
-	        --bam-filtered $EUK_OUT/{}.comp.filtered.bam \
-	        > $LOGS/{}__filterbam.log 2>&1"
-	    check_success "Final filtering"
-	fi
+        cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
+          "/projects/wintherpedersen/apps/unicorn/unicorn bamstats \
+            -b $EUK_OUT/{}.comp.unicorn.bam \
+            -t $THREADS \
+            --outbam $EUK_OUT/{}.comp.filtered.bam \
+            --outstat $EUK_OUT/{}.comp.filtered.unicorn.bamstats \
+            --printdists $EUK_OUT/{}.comp.filtered.unicorn \
+            > $LOGS/{}__unicorn_bamstats.log 2>&1"
+        check_success "Unicorn bamstats final filtering"
+
+    else
+
+        log_step "Sorting merged BAM file for bamfilter..."
+        cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
+          "samtools sort -@ $THREADS -m 10G \
+             -o $EUK_OUT/{}.sort.comp.bam \
+                $EUK_OUT/{}.comp.bam"
+        check_success "Sorting BAM file"
+
+        log_step "Final filtering with filterBAM..."
+        cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
+          "filterBAM filter \
+            -m 8G -t 12 -n 3 -A 92 -a 95 -N \
+            --bam \"$EUK_OUT/{}.sort.comp.bam\" \
+            --stats \"$EUK_OUT/{}.comp.stats.tsv.gz\" \
+            --stats-filtered \"$EUK_OUT/{}.comp.stats-filtered.tsv.gz\" \
+            --bam-filtered \"$EUK_OUT/{}.comp.filtered.bam\" \
+            --tmp-dir \"$TMP\" \
+            --low-memory \
+            > \"$LOGS/{}__filterbam.log\" 2>&1"
+        check_success "Final filtering"
+    fi
 else
   log_step "Skipping Unicorn/filterBAM as requested."
 fi
 
 if [ "$SKIP_METADMG" = false ]; then
 
-	# --- Final sorting before metaDMG ---
-	log_step "Sorting merged BAM file for metaDMG..."
-	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-	  "samtools sort -n -@ $THREADS -m 10G \
-	     -o $EUK_OUT/{}.sort.comp.filtered.bam \
-	        $EUK_OUT/{}.comp.filtered.bam"
-	check_success "Sorting BAM file"
+    log_step "Sorting merged BAM file for metaDMG..."
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
+      "samtools sort -n -@ $THREADS -m 10G \
+         -o $EUK_OUT/{}.sort.comp.filtered.bam \
+            $EUK_OUT/{}.comp.filtered.bam"
+    check_success "Sorting BAM file"
 
+    log_step "Running taxonomic classification with metaDMG..."
+    cat "$SAMPLE_LIST" | parallel --shell /bin/bash -j "$THREADSP" \
+      "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp lca \
+         --names $TAX_PATH_NCBI/taxdump/names.dmp \
+         --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
+         --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz /datasets/caeg_dataset/references/phylo_norway/20250127/*.acc2taxid.gz) \
+         --sim_score_low 0.95 --sim_score_high 1.0 --how_many 15 --weight_type 1 \
+         --fix_ncbi 0 --threads 10 --filtered_acc2tax $EUK_OUT/{}.acc2tax \
+         --bam $EUK_OUT/{}.sort.comp.filtered.bam \
+         --out_prefix $EUK_OUT/{}.sort.comp.filtered \
+         > $LOGS/{}__metadmg_lca.log 2>&1"
+    check_success "Taxonomic classification"
 
-	# --- metaDMG LCA ---
-	log_step "Running taxonomic classification with metaDMG..."
-	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-	  "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp lca \
-	     --names $TAX_PATH_NCBI/taxdump/names.dmp \
-	     --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
-	     --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz /datasets/caeg_dataset/references/phylo_norway/20250127/*.acc2taxid.gz) \
-	     --sim_score_low 0.95 --sim_score_high 1.0 --how_many 15 --weight_type 1 \
-	     --fix_ncbi 0 --threads 10 --filtered_acc2tax $EUK_OUT/{}.acc2tax \
-	     --bam $EUK_OUT/{}.sort.comp.filtered.bam \
-	     --out_prefix $EUK_OUT/{}.sort.comp.filtered \
-	     > $LOGS/{}__metadmg_lca.log 2>&1"
-	check_success "Taxonomic classification"
+    log_step "Running damage estimation with metaDMG..."
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
+      "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp dfit \
+         $EUK_OUT/{}.sort.comp.filtered.bdamage.gz --threads 6 \
+         --names $TAX_PATH_NCBI/taxdump/names.dmp \
+         --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
+         --showfits 2 --nopt 10 \
+         --nbootstrap 20 --doboot 1 --seed 1234 --lib ds \
+         --out_prefix $EUK_OUT/{}.sort.comp.filtered \
+         > $LOGS/{}__metadmg_dfit.log 2>&1"
+    check_success "Damage calculations done"
 
-
-	# --- metaDMG dfit ---
-	log_step "Running damage estimation with metaDMG..."
-	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-	  "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp dfit \
-	     $EUK_OUT/{}.sort.comp.filtered.bdamage.gz --threads 6 \
-	     --names $TAX_PATH_NCBI/taxdump/names.dmp \
-	     --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
-	     --showfits 2 --nopt 10 \
-	     --nbootstrap 20 --doboot 1 --seed 1234 --lib ds \
-	     --out_prefix $EUK_OUT/{}.sort.comp.filtered \
-	     > $LOGS/{}__metadmg_dfit.log 2>&1"
-	check_success "Damage calculations done"
-
-
-	# --- metaDMG aggregate ---
-	log_step "Aggregating lca and dfit metaDMG..."
-	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-	  "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp aggregate \
-	     $EUK_OUT/{}.sort.comp.filtered.bdamage.gz \
-	     --names $TAX_PATH_NCBI/taxdump/names.dmp \
-	     --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
-	     --lcastat $EUK_OUT/{}.sort.comp.filtered.stat.gz \
-	     --dfit $EUK_OUT/{}.sort.comp.filtered.dfit.gz \
-	     --out_prefix $EUK_OUT/{}.sort.comp.filtered.agg \
-	     > $LOGS/{}__metadmg_agg.log 2>&1"
-	check_success "Aggregation done."
+    log_step "Aggregating lca and dfit metaDMG..."
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
+      "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp aggregate \
+         $EUK_OUT/{}.sort.comp.filtered.bdamage.gz \
+         --names $TAX_PATH_NCBI/taxdump/names.dmp \
+         --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
+         --lcastat $EUK_OUT/{}.sort.comp.filtered.stat.gz \
+         --dfit $EUK_OUT/{}.sort.comp.filtered.dfit.gz \
+         --out_prefix $EUK_OUT/{}.sort.comp.filtered.agg \
+         > $LOGS/{}__metadmg_agg.log 2>&1"
+    check_success "Aggregation done."
 else
   log_step "Skipping metaDMG steps as requested."
 fi
 
-# --- Unicorn tidstats ---
 if [ "$SKIP_UNICORN_TIDSTATS" = false ]; then
-	log_step "Unicorn per taxID statistics..."
-	cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-	  "/projects/wintherpedersen/apps/unicorn/unicorn tidstats \
-	     -b $EUK_OUT/{}.sort.comp.filtered.bam \
-	     -t $THREADS \
-	     -o $EUK_OUT/{}.comp.filtered.unicorn.tidstats \
-	     --names $TAX_PATH_NCBI/taxdump/names.dmp \
-	     --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
-	     --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz /datasets/caeg_dataset/references/phylo_norway/20250127/*.acc2taxid.gz) \
-	     > $LOGS/{}__unicorn_tidstats.log 2>&1"
-	check_success "Unicorn refstats final filtering"
+    log_step "Unicorn per taxID statistics..."
+    cat "$SAMPLE_LIST" | parallel --shell /bin/bash -j "$THREADSP" \
+      "/projects/wintherpedersen/apps/unicorn/unicorn tidstats \
+         -b $EUK_OUT/{}.sort.comp.filtered.bam \
+         -t $THREADS \
+         -o $EUK_OUT/{}.comp.filtered.unicorn.tidstats \
+         --names $TAX_PATH_NCBI/taxdump/names.dmp \
+         --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
+         --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz /datasets/caeg_dataset/references/phylo_norway/20250127/*.acc2taxid.gz) \
+         > $LOGS/{}__unicorn_tidstats.log 2>&1"
+    check_success "Unicorn tidstats"
 else
   log_step "Skipping unicorn tidstats as requested."
 fi
