@@ -15,6 +15,7 @@ usage() {
     echo "Options:"
     echo "  --single-end            Treat input as single-end FASTQ (no R2, no merging)."
     echo "                          Looks for files matching: *_<sample>_*R1*_001.fastq.gz"
+	echo "  --storage-friendly      Will delete more intermediate files and only keep the final version of a bam."
     echo "  --skip-preprocessing    Skip trimming, merging, duplicate removal, and complexity filtering."
     echo "  --skip-preprocessing-cleanup  Do NOT delete preprocessing intermediates after final .ppm.vs.d4.fq.gz exists."
     echo "  --skip-gtdb-mapping     Skip GTDB mapping + merge/sort steps."
@@ -195,6 +196,7 @@ UNICORN=false
 
 # NEW: single-end mode
 SINGLE_END=false
+STORAGE_FRIENDLY=false
 
 CONFIG="$1"
 SAMPLE_LIST="$2"
@@ -203,6 +205,7 @@ shift 2
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --single-end)              SINGLE_END=true ;;
+    --storage-friendly)		   STORAGE_FRIENDLY=true ;;
     --skip-preprocessing)      SKIP_PREPROCESSING=true ;;
     --skip-preprocessing-cleanup) SKIP_PREPROCESSING_CLEANUP=true ;;
     --skip-gtdb-mapping)       SKIP_GTDB_MAPPING=true ;;
@@ -336,8 +339,7 @@ if [ "$SKIP_PREPROCESSING_CLEANUP" = false ]; then
       "${sample}.ppm.vs.fq" \
       "${sample}.ppm.vs.d4.fq" \
       "${sample}.ppm.fq.gz" \
-      "${sample}.ppm.vs.fq.gz" \
-      "${sample}.fastp.report.html"
+      "${sample}.ppm.vs.fq.gz"
     do
       if [ -e "$f" ]; then
         candidates="$candidates $f"
@@ -507,6 +509,19 @@ if [ "$SKIP_MICROBIAL_SPLIT" = false ]; then
             2> $LOGS/{}__seqtk_euk.log" \
             :::: "$SAMPLE_LIST"
         check_success "Extracting eukaryotic FASTQ"
+		
+		if [ "$STORAGE_FRIENDLY" = true ]; then
+		            log_step "Cleaning up intermediate files..."
+		            parallel -j "$THREADSP" "\
+		                rm -f \
+		                    $MICROB_OUT/{}.lca.gz \
+		                    $MICROB_OUT/{}.bact_reads.txt \
+		                    $MICROB_OUT/{}.all_reads.txt \
+		                    $EUK_OUT/{}.euk_reads.txt \
+		                2> $LOGS/{}__cleanup.log" \
+		                :::: "$SAMPLE_LIST"
+		            check_success "Cleanup intermediate files"
+		        fi
 
     else
 
@@ -573,6 +588,21 @@ if [ "$SKIP_MICROBIAL_SPLIT" = false ]; then
             2> $LOGS/{}__seqtk_euk.log" \
             :::: "$SAMPLE_LIST"
         check_success "Extracting eukaryotic FASTQ"
+		
+		if [ "$STORAGE_FRIENDLY" = true ]; then
+		            log_step "Cleaning up intermediate files..."
+		            parallel -j "$THREADSP" "\
+		                rm -f \
+		                    $MICROB_OUT/{}.bact_reads.txt* \
+		                    $MICROB_OUT/{}.bact_reads_all.txt \
+		                    $MICROB_OUT/{}.all_reads.txt \
+		                    $MICROB_OUT/{}.all_reads.sorted.txt \
+		                    $MICROB_OUT/{}.bact_reads_all.sorted.txt \
+		                    $EUK_OUT/{}.euk_reads.txt \
+		                2> $LOGS/{}__cleanup.log" \
+		                :::: "$SAMPLE_LIST"
+		            check_success "Cleanup intermediate files"
+		        fi
 
     fi
 else
@@ -796,15 +826,26 @@ fi
 
 # --- Unicorn or filterBAM ---
 if [ "$SKIP_BAM_FILTERING" = false ]; then
+    iif [ "$SKIP_UNICORN" = false ]; then
+
+    log_step "Query-sorting BAM file for downstream filtering..."
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
+      "samtools sort -n -@ $THREADS -m 10G \
+         -o $EUK_OUT/{}.qsort.comp.bam \
+            $EUK_OUT/{}.comp.bam \
+         > $LOGS/{}__qsort_compbam.log 2>&1"
+    check_success "Query sorting BAM file"
+
     if [ "$UNICORN" = true ]; then
 
-        log_step "Running unicorn filter..."
+        log_step "Running unicorn refstats..."
 
         export EUK_OUT LOGS TAX_PATH_NCBI THREADS
 
         cat "$SAMPLE_LIST" | parallel -j 1 '
           sample={};
-          outbam="$EUK_OUT/${sample}.comp.filtered.bam";
+          inbam="$EUK_OUT/${sample}.qsort.comp.bam";
+          outbam="$EUK_OUT/${sample}.comp.unicorn.bam";
           outstat="$EUK_OUT/${sample}.comp.filtered.unicorn.refstats";
           logfile="$LOGS/${sample}__unicorn_refstats.log";
 
@@ -812,7 +853,7 @@ if [ "$SKIP_BAM_FILTERING" = false ]; then
             echo "[SKIP] $sample: outputs exist and are non-empty" > "$logfile"
           else
             /projects/wintherpedersen/apps/unicorn/unicorn refstats \
-              -b "$EUK_OUT/${sample}.comp.bam" \
+              -b "$inbam" \
               -t "$THREADS" --minreads 3 \
               --outbam "$outbam" \
               --outstat "$outstat" \
@@ -821,9 +862,9 @@ if [ "$SKIP_BAM_FILTERING" = false ]; then
               > "$logfile" 2>&1
           fi
         '
-
         check_success "Unicorn refstats final filtering"
 
+        log_step "Running unicorn bamstats..."
         cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
           "/projects/wintherpedersen/apps/unicorn/unicorn bamstats \
             -b $EUK_OUT/{}.comp.unicorn.bam \
@@ -834,20 +875,23 @@ if [ "$SKIP_BAM_FILTERING" = false ]; then
             > $LOGS/{}__unicorn_bamstats.log 2>&1"
         check_success "Unicorn bamstats final filtering"
 
-    else
+        if [ "$STORAGE_FRIENDLY" = true ]; then
+            log_step "Cleaning up intermediate BAM files..."
+            cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
+              "rm -f \
+                 $EUK_OUT/{}.comp.bam \
+                 $EUK_OUT/{}.comp.unicorn.bam \
+                 > /dev/null 2> $LOGS/{}__cleanup_unicorn.log"
+            check_success "Cleanup intermediate Unicorn BAM files"
+        fi
 
-        log_step "Sorting merged BAM file for bamfilter..."
-        cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-          "samtools sort -@ $THREADS -m 10G \
-             -o $EUK_OUT/{}.sort.comp.bam \
-                $EUK_OUT/{}.comp.bam"
-        check_success "Sorting BAM file"
+    else
 
         log_step "Final filtering with filterBAM..."
         cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
           "filterBAM filter \
             -m 8G -t 12 -n 3 -A 92 -a 95 -N \
-            --bam \"$EUK_OUT/{}.sort.comp.bam\" \
+            --bam \"$EUK_OUT/{}.qsort.comp.bam\" \
             --stats \"$EUK_OUT/{}.comp.stats.tsv.gz\" \
             --stats-filtered \"$EUK_OUT/{}.comp.stats-filtered.tsv.gz\" \
             --bam-filtered \"$EUK_OUT/{}.comp.filtered.bam\" \
@@ -855,9 +899,19 @@ if [ "$SKIP_BAM_FILTERING" = false ]; then
             --low-memory \
             > \"$LOGS/{}__filterbam.log\" 2>&1"
         check_success "Final filtering"
+
+        if [ "$STORAGE_FRIENDLY" = true ]; then
+            log_step "Cleaning up intermediate BAM files..."
+            cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
+              "rm -f \
+                 $EUK_OUT/{}.comp.bam \
+                 $EUK_OUT/{}.sort.comp.bam \
+                 > /dev/null 2> $LOGS/{}__cleanup_filterbam.log"
+            check_success "Cleanup intermediate filterBAM BAM files"
+        fi
     fi
 else
-  log_step "Skipping Unicorn/filterBAM as requested."
+    log_step "Skipping Unicorn/filterBAM as requested."
 fi
 
 if [ "$SKIP_METADMG" = false ]; then
