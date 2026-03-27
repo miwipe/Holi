@@ -6,33 +6,52 @@
 # Usage information
 # -------------------------------
 usage() {
-    echo "Usage: $0 <config.yml> <sample.list> [--skip-preprocessing] [--lca-assignment] [--unicorn] [--single-end]"
+    echo "Usage: $0 <config.yml> <sample.list> [OPTIONS]"
     echo
     echo "Arguments:"
     echo "  <config.yml>            Path to YAML configuration file."
     echo "  <sample.list>           File containing list of sample names."
     echo
-    echo "Options:"
+    echo "Stage control (stages run in order 1-8):"
+    echo "  Stage 1  preprocessing"
+    echo "  Stage 2  gtdb-mapping"
+    echo "  Stage 3  microbial-split"
+    echo "  Stage 4  euk-mapping"
+    echo "  Stage 5  comp-merge"
+    echo "  Stage 6  bam-filtering"
+    echo "  Stage 7  metadmg"
+    echo "  Stage 8  unicorn-tidstats"
+    echo
+    echo "  --from-stage <N>        Skip all stages before N (inclusive shortcut)."
+    echo "  --to-stage <N>          Skip all stages after N (inclusive shortcut)."
+    echo
+    echo "Fine-grained skip options:"
+    echo "  --skip-preprocessing              Skip trimming, merging, duplicate removal, and complexity filtering."
+    echo "  --skip-preprocessing-cleanup      Do NOT delete preprocessing intermediates after final .ppm.vs.d4.fq.gz exists."
+    echo "  --skip-gtdb-mapping               Skip GTDB mapping + merge/sort steps."
+    echo "  --skip-gtdb-cleanup               Do NOT delete GTDB chunk BAMs after .gtdb.merged.bam exists."
+    echo "  --skip-microbial-split            Skip bacterial/eukaryotic read ID extraction + FASTQ subsetting."
+    echo "  --skip-euk-mapping                Skip all eukaryotic mapping steps (129 parts + mito + phyNor + core_nt + plastid)."
+    echo "  --skip-euk-cleanup                Do NOT delete euk/core_nt/phyNor/mito/pla intermediates after .comp.bam exists."
+    echo "  --skip-comp-merge                 Skip compress+sort+merge that produces *.comp.bam (assumes it already exists)."
+    echo "  --skip-bam-filtering              Skip Unicorn filtering step (alnfilt → refstats → bamstats)."
+    echo "  --skip-metadmg                    Skip metaDMG lca/dfit/aggregate steps."
+    echo "  --skip-unicorn-tidstats           Skip final unicorn tidstats step."
+    echo
+    echo "Mode options:"
     echo "  --single-end            Treat input as single-end FASTQ (no R2, no merging)."
     echo "                          Looks for files matching: *_<sample>_*R1*_001.fastq.gz"
-	echo "  --storage-friendly      Will delete more intermediate files and only keep the final version of a bam."
-    echo "  --skip-preprocessing    Skip trimming, merging, duplicate removal, and complexity filtering."
-    echo "  --skip-preprocessing-cleanup  Do NOT delete preprocessing intermediates after final .ppm.vs.d4.fq.gz exists."
-    echo "  --skip-gtdb-mapping     Skip GTDB mapping + merge/sort steps."
-    echo "  --skip-gtdb-cleanup           Do NOT delete GTDB chunk BAMs after .gtdb.merged.bam exists."
-    echo "  --skip-microbial-split  Skip bacterial/eukaryotic read ID extraction + FASTQ subsetting."
-    echo "  --skip-euk-mapping      Skip all eukaryotic mapping steps (129 parts + mito + phyNor + core_nt + plastid)."
-    echo "  --skip-euk-cleanup            Do NOT delete euk/core_nt/phyNor/mito/pla intermediates after .comp.bam exists."
-    echo "  --skip-comp-merge       Skip compress+sort+merge that produces *.comp.bam (assumes it already exists)."
-    echo "  --skip-bam-filtering    Skip Unicorn/filterBAM step (keeps *.comp.bam for downstream if not skipped)."
-    echo "  --skip-metadmg          Skip metaDMG lca/dfit/aggregate steps."
-    echo "  --skip-unicorn-tidstats Skip final unicorn tidstats step."
+    echo "  --storage-friendly      Delete intermediate files, keeping only final outputs per stage."
+    echo "  --lca-assignment        Use metaDMG LCA for microbial read splitting (default: getRTax)."
+    echo "  --force-stage <N>       Force pipeline to start from stage N, bypassing auto-detection."
     echo
-    echo "Example:"
+    echo "Examples:"
     echo "  $0 config.yml sample.list"
-    echo "  $0 config.yml sample.list --skip-preprocessing"
-    echo "  $0 config.yml sample.list --lca-assignment"
-    echo "  $0 config.yml sample.list --single-end"
+    echo "  $0 config.yml sample.list --from-stage 4"
+    echo "  $0 config.yml sample.list --force-stage 4"
+    echo "  $0 config.yml sample.list --from-stage 4 --to-stage 6"
+    echo "  $0 config.yml sample.list --from-stage 4 --skip-euk-cleanup"
+    echo "  $0 config.yml sample.list --skip-preprocessing --skip-gtdb-mapping"
     exit 1
 }
 
@@ -54,7 +73,6 @@ REQUIRED_TOOLS=(
   samtools
   conda
   seqtk
-  filterBAM
   unicorn
   metaDMG-cpp
 )
@@ -84,7 +102,7 @@ fi
 # Load config file
 # -------------------------------
 
-CONFIG=${1:-config.yml}
+CONFIG="${1:-config.yml}"
 SAMPLE_LIST="$2"
 
 load_config() {
@@ -93,30 +111,92 @@ load_config() {
         grep "^$1:" "$CONFIG_FILE" | sed 's/^.*:[[:space:]]*//' | sed 's/"//g'
     }
 
+    # Infrastructure
     LOG_FILE=$(get_value "LOG_FILE")
     THREADSP=$(get_value "THREADSP")
-    DB_PATH=$(get_value "DB_PATH")
-    DB_PATH_clean=$(get_value "DB_PATH_clean")
-    TAX_PATH_NCBI=$(get_value "TAX_PATH_NCBI")
-    DB_PATH_Norwary=$(get_value "DB_PATH_Norwary")
-    DB_PATH_bac=$(get_value "DB_PATH_bac")
-    TAX_PATH_BAC=$(get_value "TAX_PATH_BAC")
-    TAX_PATH_BAC_ACC=$(get_value "TAX_PATH_BAC_ACC")
     THREADS=$(get_value "THREADS")
-    MICROB_OUT=$(get_value "MICROB_OUT")
-    RESULT_PATH=$(get_value "RESULT_PATH")
     INPATH=$(get_value "INPATH")
+    RESULT_PATH=$(get_value "RESULT_PATH")
+    MICROB_OUT=$(get_value "MICROB_OUT")
     EUK_OUT=$(get_value "EUK_OUT")
     LOGS=$(get_value "LOGS")
-
-    # FIX: load TMP from config
     TMP=$(get_value "TMP")
+
+    # Databases
+    DB_PATH=$(get_value "DB_PATH")
+    DB_PATH_clean=$(get_value "DB_PATH_clean")
+    DB_PATH_Norwary=$(get_value "DB_PATH_Norwary")
+    DB_PATH_bac=$(get_value "DB_PATH_bac")
+
+    # Taxonomy
+    TAX_PATH_NCBI=$(get_value "TAX_PATH_NCBI")
+    TAX_PATH_BAC=$(get_value "TAX_PATH_BAC")
+    TAX_PATH_BAC_ACC=$(get_value "TAX_PATH_BAC_ACC")
+
+    # Stage 1 — fastp
+    FASTP_QUAL=$(get_value "FASTP_QUAL")
+    FASTP_MIN_AVG_QUAL=$(get_value "FASTP_MIN_AVG_QUAL")
+    FASTP_MIN_LEN=$(get_value "FASTP_MIN_LEN")
+    FASTP_DUP_ACCURACY=$(get_value "FASTP_DUP_ACCURACY")
+
+    # Stage 1 — vsearch
+    VSEARCH_MIN_SEQLEN=$(get_value "VSEARCH_MIN_SEQLEN")
+
+    # Stage 1 — sga
+    SGA_DUST_THRESHOLD=$(get_value "SGA_DUST_THRESHOLD")
+    SGA_MIN_LEN=$(get_value "SGA_MIN_LEN")
+
+    # Stage 2 — bowtie2 GTDB
+    BT2_GTDB_k=$(get_value "BT2_GTDB_k")
+    BT2_GTDB_D=$(get_value "BT2_GTDB_D")
+    BT2_GTDB_R=$(get_value "BT2_GTDB_R")
+    BT2_GTDB_N=$(get_value "BT2_GTDB_N")
+    BT2_GTDB_L=$(get_value "BT2_GTDB_L")
+    BT2_GTDB_i=$(get_value "BT2_GTDB_i")
+    BT2_GTDB_np=$(get_value "BT2_GTDB_np")
+    BT2_GTDB_mp=$(get_value "BT2_GTDB_mp")
+    BT2_GTDB_rdg=$(get_value "BT2_GTDB_rdg")
+    BT2_GTDB_rfg=$(get_value "BT2_GTDB_rfg")
+    BT2_GTDB_score_min=$(get_value "BT2_GTDB_score_min")
+
+    # Stage 3 — metaDMG LCA microbial
+    METADMG_BAC_SIM_SCORE_LOW=$(get_value "METADMG_BAC_SIM_SCORE_LOW")
+    METADMG_BAC_SIM_SCORE_HIGH=$(get_value "METADMG_BAC_SIM_SCORE_HIGH")
+    METADMG_BAC_HOW_MANY=$(get_value "METADMG_BAC_HOW_MANY")
+    METADMG_BAC_WEIGHT_TYPE=$(get_value "METADMG_BAC_WEIGHT_TYPE")
+
+    # Stage 4 — bowtie2 euk
+    BT2_EUK_k=$(get_value "BT2_EUK_k")
+
+    # Stage 6 — unicorn alnfilt
+    ALNFILT_MODE=$(get_value "ALNFILT_MODE")
+    ALNFILT_MINANI=$(get_value "ALNFILT_MINANI")
+    ALNFILT_MAXANI=$(get_value "ALNFILT_MAXANI")
+
+    # Stage 6 — unicorn refstats
+    REFSTATS_MINREADS=$(get_value "REFSTATS_MINREADS")
+
+    # Stage 7 — metaDMG LCA euk
+    METADMG_EUK_SIM_SCORE_LOW=$(get_value "METADMG_EUK_SIM_SCORE_LOW")
+    METADMG_EUK_SIM_SCORE_HIGH=$(get_value "METADMG_EUK_SIM_SCORE_HIGH")
+    METADMG_EUK_HOW_MANY=$(get_value "METADMG_EUK_HOW_MANY")
+    METADMG_EUK_WEIGHT_TYPE=$(get_value "METADMG_EUK_WEIGHT_TYPE")
+
+    # Stage 7 — metaDMG dfit
+    METADMG_DFIT_NOPT=$(get_value "METADMG_DFIT_NOPT")
+    METADMG_DFIT_NBOOTSTRAP=$(get_value "METADMG_DFIT_NBOOTSTRAP")
+    METADMG_DFIT_SEED=$(get_value "METADMG_DFIT_SEED")
+    METADMG_DFIT_LIB=$(get_value "METADMG_DFIT_LIB")
+
+    # Stage 8 — unicorn taxstats
+    TAXSTATS_k=$(get_value "TAXSTATS_k")
+    TAXSTATS_MINREADS=$(get_value "TAXSTATS_MINREADS")
 }
 
 load_config "$CONFIG"
 echo "[INFO] Loaded config from $CONFIG"
 
-# FIX: ensure TMP exists and is used by Python tools (filterBAM, etc.)
+# Ensure TMP exists and is used by Python tools (filterBAM, etc.)
 : "${TMP:=/tmp}"
 mkdir -p "$TMP" || { echo "[ERROR] Failed to create TMP dir: $TMP"; exit 1; }
 export TMPDIR="$TMP"
@@ -124,28 +204,18 @@ export TEMP="$TMP"
 export TMP="$TMP"
 
 # -----------------------------
-# Logging function and success function - forces the pipeline to exit if something goes wrong
+# Logging helpers
 # -----------------------------
 GREEN="\033[0;32m"
 YELLOW="\033[1;33m"
 RED="\033[0;31m"
 RESET="\033[0m"
 
-timestamp() {
-    date +"%Y-%m-%d %H:%M:%S"
-}
+timestamp() { date +"%Y-%m-%d %H:%M:%S"; }
 
-log_step() {
-    printf "${YELLOW}[%s][STEP]${RESET} %s\n" "$(timestamp)" "$1"
-}
-
-log_info() {
-    printf "${GREEN}[%s][INFO]${RESET} %s\n" "$(timestamp)" "$1"
-}
-
-log_error() {
-    printf "${RED}[%s][ERROR]${RESET} %s\n" "$(timestamp)" "$1"
-}
+log_step()  { printf "${YELLOW}[%s][STEP]${RESET} %s\n"  "$(timestamp)" "$1"; }
+log_info()  { printf "${GREEN}[%s][INFO]${RESET} %s\n"   "$(timestamp)" "$1"; }
+log_error() { printf "${RED}[%s][ERROR]${RESET} %s\n"    "$(timestamp)" "$1"; }
 
 check_success() {
     if [ $? -eq 0 ]; then
@@ -164,21 +234,16 @@ REQUIRED_DIRS=("$RESULT_PATH" "$EUK_OUT" "$MICROB_OUT" "$LOGS" "$TMP")
 for dir in "${REQUIRED_DIRS[@]}"; do
     if [ ! -d "$dir" ]; then
         log_info "Directory $dir does not exist. Creating it..."
-        mkdir -p "$dir"
-        if [ $? -ne 0 ]; then
-            log_error "Failed to create directory $dir. Exiting."
-            exit 1
-        fi
+        mkdir -p "$dir" || { log_error "Failed to create directory $dir. Exiting."; exit 1; }
     else
         log_info "Directory $dir exists."
     fi
 done
 
 # ---------------------------
-## Holi pipeline:
+# Parse flags
 # ---------------------------
 
-# Check for command-line arguments
 SKIP_PREPROCESSING=false
 SKIP_PREPROCESSING_CLEANUP=false
 SKIP_GTDB_MAPPING=false
@@ -192,47 +257,185 @@ SKIP_METADMG=false
 SKIP_UNICORN_TIDSTATS=false
 
 LCA_ASSIGN=false
-UNICORN=false
-
-# NEW: single-end mode
 SINGLE_END=false
 STORAGE_FRIENDLY=false
 
-CONFIG="$1"
-SAMPLE_LIST="$2"
-shift 2
+FROM_STAGE=1
+TO_STAGE=8
+FORCE_STAGE=""
+USER_SET_FROM_STAGE=false
+
+shift 2   # consume positional args (config + sample list)
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --single-end)              SINGLE_END=true ;;
-    --storage-friendly)		   STORAGE_FRIENDLY=true ;;
-    --skip-preprocessing)      SKIP_PREPROCESSING=true ;;
+    --from-stage)                 FROM_STAGE="$2"; USER_SET_FROM_STAGE=true; shift ;;
+    --to-stage)                   TO_STAGE="$2";             shift ;;
+    --force-stage)                FORCE_STAGE="$2";          shift ;;
+    --single-end)                 SINGLE_END=true ;;
+    --storage-friendly)           STORAGE_FRIENDLY=true ;;
+    --skip-preprocessing)         SKIP_PREPROCESSING=true ;;
     --skip-preprocessing-cleanup) SKIP_PREPROCESSING_CLEANUP=true ;;
-    --skip-gtdb-mapping)       SKIP_GTDB_MAPPING=true ;;
-    --skip-gtdb-cleanup)       SKIP_GTDB_CLEANUP=true ;;
-    --skip-microbial-split)    SKIP_MICROBIAL_SPLIT=true ;;
-    --skip-euk-mapping)        SKIP_EUK_MAPPING=true ;;
-    --skip-euk-cleanup)        SKIP_EUK_CLEANUP=true ;;
-    --skip-comp-merge)         SKIP_COMP_MERGE=true ;;
-    --skip-bam-filtering)      SKIP_BAM_FILTERING=true ;;
-    --skip-metadmg)            SKIP_METADMG=true ;;
-    --skip-unicorn-tidstats)   SKIP_UNICORN_TIDSTATS=true ;;
-    --lca-assignment)          LCA_ASSIGN=true ;;
-    --unicorn)                 UNICORN=true ;;
-    *) echo "[ERROR] Unknown option: $1"; usage ;;
+    --skip-gtdb-mapping)          SKIP_GTDB_MAPPING=true ;;
+    --skip-gtdb-cleanup)          SKIP_GTDB_CLEANUP=true ;;
+    --skip-microbial-split)       SKIP_MICROBIAL_SPLIT=true ;;
+    --skip-euk-mapping)           SKIP_EUK_MAPPING=true ;;
+    --skip-euk-cleanup)           SKIP_EUK_CLEANUP=true ;;
+    --skip-comp-merge)            SKIP_COMP_MERGE=true ;;
+    --skip-bam-filtering)         SKIP_BAM_FILTERING=true ;;
+    --skip-metadmg)               SKIP_METADMG=true ;;
+    --skip-unicorn-tidstats)      SKIP_UNICORN_TIDSTATS=true ;;
+    --lca-assignment)             LCA_ASSIGN=true ;;
+    *) log_error "Unknown option: $1"; usage ;;
   esac
   shift
 done
 
-# Check if config file exists and is not empty
+# ---------------------------
+# Auto-detection: check output integrity for each stage across all samples
+# Returns the first stage where any sample is incomplete/corrupt.
+# ---------------------------
+
+check_bam()  { samtools quickcheck "$1" 2>/dev/null; }
+check_gz() {
+    # Check file is non-empty and starts with gzip magic bytes (1f 8b)
+    # then verify it is not truncated by confirming the EOF marker exists
+    [[ -s "$1" ]] || return 1
+    local magic
+    magic=$(xxd -l 2 -p "$1" 2>/dev/null)
+    [[ "$magic" == "1f8b" ]] || return 1
+    # Fast truncation check: last 2 bytes of a valid gzip must be non-zero
+    # (they encode the original file size mod 2^32)
+    local tail_bytes
+    tail_bytes=$(tail -c 8 "$1" | wc -c)
+    [[ "$tail_bytes" -ge 8 ]] || return 1
+    return 0
+}
+check_file() { [[ -s "$1" ]]; }
+
+# Returns 0 (complete) or 1 (incomplete/missing/corrupt) for a given stage
+stage_complete() {
+    local stage=$1
+
+    while IFS= read -r sample; do
+        local ok=true
+        case "$stage" in
+            1) check_gz  "${sample}.ppm.vs.d4.fq.gz"                               || ok=false ;;
+            2) check_bam "$MICROB_OUT/${sample}.gtdb.merged.bam"                    || ok=false ;;
+            3) check_gz  "$EUK_OUT/${sample}.euk.fastq.gz"                          || ok=false ;;
+            4) # pla.bam may have been cleaned up — accept comp.bam as evidence stage 4+5 completed
+               { check_bam "$EUK_OUT/${sample}.pla.bam" || check_bam "$EUK_OUT/${sample}.comp.bam"; } || ok=false ;;
+            5) check_bam "$EUK_OUT/${sample}.comp.bam"                              || ok=false ;;
+            6) check_bam "$EUK_OUT/${sample}.comp.filtered.bam"                     || ok=false ;;
+            7) check_gz  "$EUK_OUT/${sample}.sort.comp.filtered.agg.stat.gz"        || ok=false ;;
+            8) check_file "$EUK_OUT/${sample}.comp.filtered.species.taxstats"       || ok=false ;;
+        esac
+
+        if [ "$ok" = false ]; then
+            log_info "Stage $stage incomplete for sample: $sample" >&2
+            return 1
+        fi
+    done < "$SAMPLE_LIST"
+
+    return 0
+}
+
+detect_resume_stage() {
+    log_info "Auto-detecting resume stage..." >&2
+    for stage in 1 2 3 4 5 6 7 8; do
+        if ! stage_complete "$stage"; then
+            log_info "Auto-detected start stage: $stage" >&2
+            echo "$stage"
+            return
+        fi
+    done
+    echo "done"
+}
+
+# ---------------------------
+# Resolve FROM_STAGE: force > explicit > auto-detect
+# ---------------------------
+
+if [ -n "$FORCE_STAGE" ]; then
+    if ! [[ "$FORCE_STAGE" =~ ^[1-8]$ ]]; then
+        log_error "--force-stage must be an integer between 1 and 8."
+        exit 1
+    fi
+    FROM_STAGE="$FORCE_STAGE"
+    log_info "Forced start stage: $FROM_STAGE (auto-detection skipped)"
+
+elif [ "$USER_SET_FROM_STAGE" = false ]; then
+    DETECTED=$(detect_resume_stage)
+    if [ "$DETECTED" = "done" ]; then
+        log_info "All stages appear complete for all samples. Nothing to do."
+        log_info "Use --force-stage <N> to rerun from a specific stage."
+        exit 0
+    fi
+    FROM_STAGE="$DETECTED"
+    log_info "Resuming from stage: $FROM_STAGE"
+
+else
+    log_info "Manual --from-stage $FROM_STAGE provided. Skipping auto-detection."
+fi
+
+# ---------------------------
+# Apply --from-stage / --to-stage
+# These set skip flags but never override an already-set skip flag,
+# so fine-grained --skip-X options always win.
+# ---------------------------
+
+# Validate stage range
+if ! [[ "$FROM_STAGE" =~ ^[1-8]$ ]] || ! [[ "$TO_STAGE" =~ ^[1-8]$ ]]; then
+    log_error "--from-stage and --to-stage must be integers between 1 and 8."
+    exit 1
+fi
+if [ "$FROM_STAGE" -gt "$TO_STAGE" ]; then
+    log_error "--from-stage ($FROM_STAGE) cannot be greater than --to-stage ($TO_STAGE)."
+    exit 1
+fi
+
+# Skip stages before FROM_STAGE
+[ "$FROM_STAGE" -gt 1 ] && SKIP_PREPROCESSING=true
+[ "$FROM_STAGE" -gt 2 ] && SKIP_GTDB_MAPPING=true
+[ "$FROM_STAGE" -gt 3 ] && SKIP_MICROBIAL_SPLIT=true
+[ "$FROM_STAGE" -gt 4 ] && SKIP_EUK_MAPPING=true
+[ "$FROM_STAGE" -gt 5 ] && SKIP_COMP_MERGE=true
+[ "$FROM_STAGE" -gt 6 ] && SKIP_BAM_FILTERING=true
+[ "$FROM_STAGE" -gt 7 ] && SKIP_METADMG=true
+
+# Skip stages after TO_STAGE
+[ "$TO_STAGE" -lt 8 ] && SKIP_UNICORN_TIDSTATS=true
+[ "$TO_STAGE" -lt 7 ] && SKIP_METADMG=true
+[ "$TO_STAGE" -lt 6 ] && SKIP_BAM_FILTERING=true
+[ "$TO_STAGE" -lt 5 ] && SKIP_COMP_MERGE=true
+[ "$TO_STAGE" -lt 4 ] && SKIP_EUK_MAPPING=true
+[ "$TO_STAGE" -lt 3 ] && SKIP_MICROBIAL_SPLIT=true
+[ "$TO_STAGE" -lt 2 ] && SKIP_GTDB_MAPPING=true
+
+# ---------------------------
+# Print resolved stage plan
+# ---------------------------
+log_info "Stage plan:"
+log_info "  Stage 1  preprocessing      : $([ "$SKIP_PREPROCESSING"    = true ] && echo SKIP || echo RUN)"
+log_info "  Stage 2  gtdb-mapping       : $([ "$SKIP_GTDB_MAPPING"     = true ] && echo SKIP || echo RUN)"
+log_info "  Stage 3  microbial-split    : $([ "$SKIP_MICROBIAL_SPLIT"  = true ] && echo SKIP || echo RUN)"
+log_info "  Stage 4  euk-mapping        : $([ "$SKIP_EUK_MAPPING"      = true ] && echo SKIP || echo RUN)"
+log_info "  Stage 5  comp-merge         : $([ "$SKIP_COMP_MERGE"       = true ] && echo SKIP || echo RUN)"
+log_info "  Stage 6  bam-filtering      : $([ "$SKIP_BAM_FILTERING"    = true ] && echo SKIP || echo RUN)"
+log_info "  Stage 7  metadmg            : $([ "$SKIP_METADMG"          = true ] && echo SKIP || echo RUN)"
+log_info "  Stage 8  unicorn-tidstats   : $([ "$SKIP_UNICORN_TIDSTATS" = true ] && echo SKIP || echo RUN)"
+
+# ---------------------------
+# Validate config and sample list
+# ---------------------------
+
 if [ ! -s "$CONFIG" ]; then
     echo "[ERROR] Config file ($CONFIG) is empty or does not exist." | tee -a "$LOG_FILE"
     exit 1
 fi
 
-# Check if sample list file exists and is not empty
 if [ -z "$SAMPLE_LIST" ]; then
-    echo "[ERROR] No sample.list provided. Please provide a sample list file as an argument." | tee -a "$LOG_FILE"
+    echo "[ERROR] No sample.list provided." | tee -a "$LOG_FILE"
     exit 1
 fi
 
@@ -240,6 +443,10 @@ if [ ! -s "$SAMPLE_LIST" ]; then
     echo "[ERROR] Sample list file ($SAMPLE_LIST) is empty or does not exist." | tee -a "$LOG_FILE"
     exit 1
 fi
+
+# ===========================================================
+# STAGE 1 — Preprocessing
+# ===========================================================
 
 if [ "$SKIP_PREPROCESSING" = false ]; then
     ####################### QC ##############################
@@ -252,16 +459,13 @@ if [ "$SKIP_PREPROCESSING" = false ]; then
           sample={}
           logfile="$LOGS/${sample}__fastp.log"
 
-          # Match your naming convention: *_<sample>_*R1*_001.fastq.gz
           matches=( ${INPATH}/*_${sample}_*R1*_001.fastq.gz )
 
-          # No matches -> bash keeps the literal pattern
           if [[ "${matches[0]}" == "${INPATH}/*_${sample}_*R1*_001.fastq.gz" ]]; then
             echo "ERROR: No FASTQ matched pattern: ${INPATH}/*_${sample}_*R1*_001.fastq.gz" > "$logfile"
             exit 1
           fi
 
-          # Multiple matches -> fail loudly (lane splits etc.)
           if (( ${#matches[@]} > 1 )); then
             echo "ERROR: Multiple FASTQs matched for ${sample}:" > "$logfile"
             printf "%s\n" "${matches[@]}" >> "$logfile"
@@ -275,8 +479,8 @@ if [ "$SKIP_PREPROCESSING" = false ]; then
             -i "$in_fq" \
             -o "${sample}.ppm.fq" \
             -V \
-            -D --dup_calc_accuracy 5 \
-            -g -x -q 30 -e 25 -l 30 -y -c -p \
+            -D --dup_calc_accuracy $FASTP_DUP_ACCURACY \
+            -g -x -q $FASTP_QUAL -e $FASTP_MIN_AVG_QUAL -l $FASTP_MIN_LEN -y -c -p \
             -h "${sample}.fastp.report.html" \
             -w 1 > "$logfile" 2>&1
         '
@@ -289,8 +493,8 @@ if [ "$SKIP_PREPROCESSING" = false ]; then
           -I \"${INPATH}/{}\"*R2*.fastq.gz \
           -m --merged_out '{}.ppm.fq' \
           -V --detect_adapter_for_pe \
-          -D --dup_calc_accuracy 5 \
-          -g -x -q 30 -e 25 -l 30 -y -c -p \
+          -D --dup_calc_accuracy $FASTP_DUP_ACCURACY \
+          -g -x -q $FASTP_QUAL -e $FASTP_MIN_AVG_QUAL -l $FASTP_MIN_LEN -y -c -p \
           -h '{}.fastp.report.html' -w 1 > $LOGS/{}__fastp.log 2>&1"
         check_success "Trimming and merging reads"
     fi
@@ -299,19 +503,19 @@ if [ "$SKIP_PREPROCESSING" = false ]; then
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "vsearch \
       --fastx_uniques '{}.ppm.fq' \
       --fastqout '{}.ppm.vs.fq' \
-      --minseqlength 30 \
+      --minseqlength $VSEARCH_MIN_SEQLEN \
       --strand both > $LOGS/{}__vsearch.log 2>&1"
     check_success "Duplicate removal"
 
     log_step "Filtering low-complexity reads with SGA..."
-    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "sga preprocess --dust-threshold=1 -m 30 '{}.ppm.vs.fq' -o '{}.ppm.vs.d4.fq' > $LOGS/{}__sga.log 2>&1"
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "sga preprocess --dust-threshold=$SGA_DUST_THRESHOLD -m $SGA_MIN_LEN '{}.ppm.vs.fq' -o '{}.ppm.vs.d4.fq' > $LOGS/{}__sga.log 2>&1"
     check_success "Low-complexity filtering"
 
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "gzip '{}.ppm.vs.d4.fq'"
     check_success "Compressing filtered files"
 
 else
-    log_step "Skipping preprocessing as requested."
+    log_step "Skipping Stage 1 (preprocessing) as requested."
 fi
 
 if [ "$SKIP_PREPROCESSING_CLEANUP" = false ]; then
@@ -322,17 +526,13 @@ if [ "$SKIP_PREPROCESSING_CLEANUP" = false ]; then
   parallel -j "$THREADSP" --env LOGS '
     sample={}
     logfile="$LOGS/${sample}__cleanup_preprocessing.log"
-
     final="${sample}.ppm.vs.d4.fq.gz"
-    echo "[INFO] PWD: $(pwd)" > "$logfile"
-    echo "[INFO] Final: $final" >> "$logfile"
 
     if [ ! -s "$final" ]; then
       echo "[SKIP] Final preprocessed file missing/empty: $final" >> "$logfile"
       exit 0
     fi
 
-    # Build candidates as a whitespace-separated list (safe here because filenames have no spaces)
     candidates=""
     for f in \
       "${sample}.ppm.fq" \
@@ -341,9 +541,7 @@ if [ "$SKIP_PREPROCESSING_CLEANUP" = false ]; then
       "${sample}.ppm.fq.gz" \
       "${sample}.ppm.vs.fq.gz"
     do
-      if [ -e "$f" ]; then
-        candidates="$candidates $f"
-      fi
+      [ -e "$f" ] && candidates="$candidates $f"
     done
 
     if [ -z "$candidates" ]; then
@@ -352,9 +550,7 @@ if [ "$SKIP_PREPROCESSING_CLEANUP" = false ]; then
     fi
 
     echo "[INFO] Deleting:$candidates" >> "$logfile"
-
     rm -f $candidates 2>> "$logfile"
-
     echo "[INFO] Cleanup done for $sample" >> "$logfile"
   ' :::: "$SAMPLE_LIST"
 
@@ -363,15 +559,23 @@ else
   log_step "Skipping preprocessing cleanup (--skip-preprocessing-cleanup)."
 fi
 
-# -------------------------------
-# Step 1: Mapping against GTDB (7 chunks)
-# -------------------------------
+# ===========================================================
+# STAGE 2 — GTDB mapping
+# ===========================================================
 
 if [ "$SKIP_GTDB_MAPPING" = false ]; then
   log_step "Starting mapping and taxonomic classification against GTDB..."
 
   for db in {1..7}; do
-    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "bowtie2 --threads $THREADS -x $DB_PATH_bac.$db.fas.gz -U {}.ppm.vs.d4.fq.gz -k 1000 -D 15 -R 2 -N 1 -L 22 -i S,1,1.15 --np 1 --mp '1,1' --rdg '0,1' --rfg '0,1' --score-min 'L,0,-0.1' --mm --no-unal 2> $LOGS/{}.gtdb.$db.bowtie2.log | samtools view -bS - > $MICROB_OUT/{}.gtdb.$db.bam"
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" "bowtie2 --threads $THREADS \
+        -x $DB_PATH_bac.$db.fas.gz \
+        -U {}.ppm.vs.d4.fq.gz \
+        -k $BT2_GTDB_k -D $BT2_GTDB_D -R $BT2_GTDB_R -N $BT2_GTDB_N -L $BT2_GTDB_L \
+        -i $BT2_GTDB_i --np $BT2_GTDB_np --mp '$BT2_GTDB_mp' \
+        --rdg '$BT2_GTDB_rdg' --rfg '$BT2_GTDB_rfg' \
+        --score-min '$BT2_GTDB_score_min' --mm --no-unal \
+        2> $LOGS/{}.gtdb.$db.bowtie2.log \
+        | samtools view -bS - > $MICROB_OUT/{}.gtdb.$db.bam"
     check_success "Mapping to GTDB chunk $db"
   done
 
@@ -387,12 +591,9 @@ if [ "$SKIP_GTDB_MAPPING" = false ]; then
     "samtools merge -@ $THREADS -f $MICROB_OUT/{}.gtdb.merged.bam $MICROB_OUT/{}.gtdb.*.sorted.bam"
   check_success "Merging GTDB BAM files"
 else
-  log_step "Skipping GTDB mapping as requested."
+  log_step "Skipping Stage 2 (GTDB mapping) as requested."
 fi
 
-# ----------------------------
-# Cleanup per-chunk GTDB BAMs
-# ----------------------------
 if [ "$SKIP_GTDB_CLEANUP" = false ]; then
     log_step "Cleaning GTDB chunk BAMs now that merged BAM exists..."
 
@@ -422,9 +623,7 @@ if [ "$SKIP_GTDB_CLEANUP" = false ]; then
 
       echo "$candidates" | wc -l | awk "{print \"[INFO] Deleting \" \$1 \" files for $sample\"}" > "$logfile"
       echo "$candidates" >> "$logfile"
-
       echo "$candidates" | xargs -r rm -f
-
       echo "[INFO] Cleanup done for $sample" >> "$logfile"
     ' :::: "$SAMPLE_LIST"
 
@@ -432,6 +631,10 @@ if [ "$SKIP_GTDB_CLEANUP" = false ]; then
 else
     log_step "Skipping GTDB BAM cleanup (--skip-gtdb-cleanup)."
 fi
+
+# ===========================================================
+# STAGE 3 — Microbial / eukaryotic read splitting
+# ===========================================================
 
 if [ "$SKIP_MICROBIAL_SPLIT" = false ]; then
 
@@ -452,10 +655,10 @@ if [ "$SKIP_MICROBIAL_SPLIT" = false ]; then
                 --names $TAX_PATH_BAC/names.dmp \
                 --nodes $TAX_PATH_BAC/nodes.dmp \
                 --acc2tax $TAX_PATH_BAC_ACC/hires-organelles-viruses-smags.acc2taxid.gz \
-                --sim_score_low 0.92 \
-                --sim_score_high 1.0 \
-                --how_many 15 \
-                --weight_type 1 \
+                --sim_score_low $METADMG_BAC_SIM_SCORE_LOW \
+                --sim_score_high $METADMG_BAC_SIM_SCORE_HIGH \
+                --how_many $METADMG_BAC_HOW_MANY \
+                --weight_type $METADMG_BAC_WEIGHT_TYPE \
                 --fix_ncbi 0 \
                 --threads 10 \
                 --bam $MICROB_OUT/{}.gtdb.merged.sorted.bam \
@@ -509,19 +712,19 @@ if [ "$SKIP_MICROBIAL_SPLIT" = false ]; then
             2> $LOGS/{}__seqtk_euk.log" \
             :::: "$SAMPLE_LIST"
         check_success "Extracting eukaryotic FASTQ"
-		
-		if [ "$STORAGE_FRIENDLY" = true ]; then
-		            log_step "Cleaning up intermediate files..."
-		            parallel -j "$THREADSP" "\
-		                rm -f \
-		                    $MICROB_OUT/{}.lca.gz \
-		                    $MICROB_OUT/{}.bact_reads.txt \
-		                    $MICROB_OUT/{}.all_reads.txt \
-		                    $EUK_OUT/{}.euk_reads.txt \
-		                2> $LOGS/{}__cleanup.log" \
-		                :::: "$SAMPLE_LIST"
-		            check_success "Cleanup intermediate files"
-		        fi
+
+        if [ "$STORAGE_FRIENDLY" = true ]; then
+            log_step "Cleaning up intermediate files..."
+            parallel -j "$THREADSP" "\
+                rm -f \
+                    $MICROB_OUT/{}.lca.gz \
+                    $MICROB_OUT/{}.bact_reads.txt \
+                    $MICROB_OUT/{}.all_reads.txt \
+                    $EUK_OUT/{}.euk_reads.txt \
+                2> $LOGS/{}__cleanup.log" \
+                :::: "$SAMPLE_LIST"
+            check_success "Cleanup intermediate files"
+        fi
 
     else
 
@@ -588,49 +791,49 @@ if [ "$SKIP_MICROBIAL_SPLIT" = false ]; then
             2> $LOGS/{}__seqtk_euk.log" \
             :::: "$SAMPLE_LIST"
         check_success "Extracting eukaryotic FASTQ"
-		
-		if [ "$STORAGE_FRIENDLY" = true ]; then
-		            log_step "Cleaning up intermediate files..."
-		            parallel -j "$THREADSP" "\
-		                rm -f \
-		                    $MICROB_OUT/{}.bact_reads.txt* \
-		                    $MICROB_OUT/{}.bact_reads_all.txt \
-		                    $MICROB_OUT/{}.all_reads.txt \
-		                    $MICROB_OUT/{}.all_reads.sorted.txt \
-		                    $MICROB_OUT/{}.bact_reads_all.sorted.txt \
-		                    $EUK_OUT/{}.euk_reads.txt \
-		                2> $LOGS/{}__cleanup.log" \
-		                :::: "$SAMPLE_LIST"
-		            check_success "Cleanup intermediate files"
-		        fi
+
+        if [ "$STORAGE_FRIENDLY" = true ]; then
+            log_step "Cleaning up intermediate files..."
+            parallel -j "$THREADSP" "\
+                rm -f \
+                    $MICROB_OUT/{}.bact_reads.txt* \
+                    $MICROB_OUT/{}.bact_reads_all.txt \
+                    $MICROB_OUT/{}.all_reads.txt \
+                    $MICROB_OUT/{}.all_reads.sorted.txt \
+                    $MICROB_OUT/{}.bact_reads_all.sorted.txt \
+                    $EUK_OUT/{}.euk_reads.txt \
+                2> $LOGS/{}__cleanup.log" \
+                :::: "$SAMPLE_LIST"
+            check_success "Cleanup intermediate files"
+        fi
 
     fi
 else
-  log_step "Skipping microbial read splitting as requested."
+  log_step "Skipping Stage 3 (microbial read splitting) as requested."
 fi
 
-# ----------------------------------------------
-# Step 2: Eukaryotic mapping
-# ----------------------------------------------
+# ===========================================================
+# STAGE 4 — Eukaryotic mapping
+# ===========================================================
+
 if [ "$SKIP_EUK_MAPPING" = false ]; then
 
     log_step "Mapping reads to eukaryote database (129 parts) with bowtie2..."
     for db in {1..129}; do
         parallel -j "$THREADSP" "\
-            bowtie2 --threads $THREADS -k 1000 -t \
+            bowtie2 --threads $THREADS -k $BT2_EUK_k -t \
                 -x $DB_PATH.$db.fas.gz \
                 -U $EUK_OUT/{}.euk.fastq.gz \
                 --no-unal --mm -t 2> $LOGS/{}__eukmap_part_${db}.log \
             | samtools view -bS - \
                 > $EUK_OUT/{}.euk.$db.bam" \
             :::: "$SAMPLE_LIST"
-
         check_success "Mapping to eukaryote database part $db"
     done
 
     log_step "Mapping reads to mitochondrion database with bowtie2..."
     parallel -j "$THREADSP" "\
-        bowtie2 --threads $THREADS -k 1000 -t \
+        bowtie2 --threads $THREADS -k $BT2_EUK_k -t \
             -x $DB_PATH_clean/refseq_mitochondrion.genomic.fas.gz \
             -U $EUK_OUT/{}.euk.fastq.gz \
             --no-unal --mm -t 2> $LOGS/{}__mitochondrion.log \
@@ -642,20 +845,19 @@ if [ "$SKIP_EUK_MAPPING" = false ]; then
     log_step "Mapping reads to phylonorwary database (10 parts) with bowtie2..."
     for db in {1..10}; do
         parallel -j "$THREADSP" "\
-            bowtie2 --threads $THREADS -k 1000 -t \
+            bowtie2 --threads $THREADS -k $BT2_EUK_k -t \
                 -x $DB_PATH_Norwary.$db-of-10 \
                 -U $EUK_OUT/{}.euk.fastq.gz \
                 --no-unal --mm -t 2> $LOGS/{}__phynor_part_${db}.log \
             | samtools view -bS - \
                 > $EUK_OUT/{}.phyNor.$db.bam" \
             :::: "$SAMPLE_LIST"
-
         check_success "Mapping to phylonorwary database part $db"
     done
 
     log_step "Mapping reads to core NT database with bowtie2..."
     parallel -j "$THREADSP" "\
-        bowtie2 --threads $THREADS -k 1000 -t \
+        bowtie2 --threads $THREADS -k $BT2_EUK_k -t \
             -x $DB_PATH_clean/core_nt.fas.gz \
             -U $EUK_OUT/{}.euk.fastq.gz \
             --no-unal --mm -t 2> $LOGS/{}__core_nt.log \
@@ -666,7 +868,7 @@ if [ "$SKIP_EUK_MAPPING" = false ]; then
 
     log_step "Mapping reads to plastid database with bowtie2..."
     parallel -j "$THREADSP" "\
-        bowtie2 --threads $THREADS -k 1000 -t \
+        bowtie2 --threads $THREADS -k $BT2_EUK_k -t \
             -x $DB_PATH_clean/refseq_plastid.genomic.fas.gz \
             -U $EUK_OUT/{}.euk.fastq.gz \
             --no-unal --mm -t 2> $LOGS/{}__plastid.log \
@@ -677,15 +879,14 @@ if [ "$SKIP_EUK_MAPPING" = false ]; then
 
     log_step "Mapping finished. Continuing with merging..."
 else
-  log_step "Skipping eukaryotic mapping as requested."
+  log_step "Skipping Stage 4 (eukaryotic mapping) as requested."
 fi
 
-# ------------------------------------
-# Step 3: Analysis of bam files
-# ------------------------------------
+# ===========================================================
+# STAGE 5 — Compress, sort, merge BAMs
+# ===========================================================
 
 if [ "$SKIP_COMP_MERGE" = false ]; then
-    # --- Compress BAM files using metaDMG ---
     log_step "Compressing BAM files using metaDMG..."
 
     export EUK_OUT THREADS THREADSP LOGS
@@ -693,7 +894,6 @@ if [ "$SKIP_COMP_MERGE" = false ]; then
     parallel -j "$THREADSP" --env EUK_OUT --env LOGS '
       sample={};
 
-      # Find raw BAMs for this sample
       find "$EUK_OUT" -type f -name "${sample}*.bam" \
         | grep -E "${sample}\.(euk|mito|pla|phyNor|core_nt)(\.[0-9]+)?\.bam$" \
         | grep -vE "sorted|comp|merged" \
@@ -711,7 +911,6 @@ if [ "$SKIP_COMP_MERGE" = false ]; then
 
           done
     ' :::: "$SAMPLE_LIST"
-
     check_success "Compressing BAM files"
 
     log_step "Sorting each BAM file before merging..."
@@ -731,27 +930,24 @@ if [ "$SKIP_COMP_MERGE" = false ]; then
 
           done
     ' :::: "$SAMPLE_LIST"
+    check_success "BAM files sorted"
 
-    check_success "Bam files sorted"
-
-    # --- Merge ---
     log_step "Merging all sorted BAM files..."
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
       "samtools merge -@ $THREADS -n -f \
          $EUK_OUT/{}.comp.sam.gz $EUK_OUT/{}*.comp.sorted.bam"
     check_success "Merging BAM files to sam.gz"
 
-    # --- Compress merged SAM to BAM ---
-    log_step "Compress bam..."
+    log_step "Compressing merged SAM..."
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
       "/projects/wintherpedersen/apps/metaDMG_14jun24/metaDMG-cpp/misc/compressbam \
          --threads 12 \
          --input $EUK_OUT/{}.comp.sam.gz \
          --output $EUK_OUT/{}.comp.bam \
          > $LOGS/{}__compress_merged.log 2>&1"
-    check_success "merged sam.gz files with compress bam"
+    check_success "Merged sam.gz compressed to comp.bam"
 else
-  log_step "Skipping compress/sort/merge stage (--skip-comp-merge). Expecting $EUK_OUT/<sample>.comp.bam to already exist."
+  log_step "Skipping Stage 5 (compress/sort/merge). Expecting $EUK_OUT/<sample>.comp.bam to already exist."
 fi
 
 log_step "Checking that merged comp.bam exists for all samples..."
@@ -776,8 +972,8 @@ if [ "$SKIP_EUK_CLEANUP" = false ]; then
   parallel -j "$THREADSP" --env EUK_OUT --env LOGS '
     sample={};
     logfile="$LOGS/${sample}__cleanup_mapping_bams.log";
-
     merged="$EUK_OUT/${sample}.comp.bam";
+
     if [ ! -s "$merged" ]; then
       echo "[SKIP] merged comp.bam missing: $merged" > "$logfile";
       exit 0
@@ -813,9 +1009,7 @@ if [ "$SKIP_EUK_CLEANUP" = false ]; then
 
     echo "$candidates" | wc -l | awk "{print \"[INFO] Deleting \" \$1 \" files for $sample\"}" > "$logfile"
     echo "$candidates" >> "$logfile"
-
     echo "$candidates" | xargs -r rm -f
-
     echo "[INFO] Cleanup done for $sample" >> "$logfile"
   ' :::: "$SAMPLE_LIST"
 
@@ -824,95 +1018,78 @@ else
   log_step "Skipping mapping-intermediate cleanup (--skip-euk-cleanup)."
 fi
 
-# --- Unicorn or filterBAM ---
+# ===========================================================
+# STAGE 6 — BAM filtering (Unicorn: alnfilt → refstats → bamstats)
+# ===========================================================
+
 if [ "$SKIP_BAM_FILTERING" = false ]; then
-    iif [ "$SKIP_UNICORN" = false ]; then
 
-    log_step "Query-sorting BAM file for downstream filtering..."
+    log_step "Running unicorn alnfilt..."
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-      "samtools sort -n -@ $THREADS -m 10G \
-         -o $EUK_OUT/{}.qsort.comp.bam \
-            $EUK_OUT/{}.comp.bam \
-         > $LOGS/{}__qsort_compbam.log 2>&1"
-    check_success "Query sorting BAM file"
+      "/projects/wintherpedersen/apps/unicorn/unicorn alnfilt \
+         -b $EUK_OUT/{}.comp.bam \
+         -t $THREADS --mode $ALNFILT_MODE \
+         --outbam $EUK_OUT/{}.alnfilt.bam \
+         --outstat $EUK_OUT/{}.alnfilt.refstats \
+         --minani $ALNFILT_MINANI --maxani $ALNFILT_MAXANI \
+         > $LOGS/{}__unicorn_alnfilt.log 2>&1"
+    check_success "Unicorn alnfilt"
 
-    if [ "$UNICORN" = true ]; then
+    log_step "Running unicorn refstats..."
 
-        log_step "Running unicorn refstats..."
+    export EUK_OUT LOGS TAX_PATH_NCBI THREADS
 
-        export EUK_OUT LOGS TAX_PATH_NCBI THREADS
+    cat "$SAMPLE_LIST" | parallel -j 1 '
+      sample={};
+      inbam="$EUK_OUT/${sample}.alnfilt.bam";
+      outbam="$EUK_OUT/${sample}.comp.unicorn.bam";
+      outstat="$EUK_OUT/${sample}.comp.unicorn.refstats";
+      logfile="$LOGS/${sample}__unicorn_refstats.log";
 
-        cat "$SAMPLE_LIST" | parallel -j 1 '
-          sample={};
-          inbam="$EUK_OUT/${sample}.qsort.comp.bam";
-          outbam="$EUK_OUT/${sample}.comp.unicorn.bam";
-          outstat="$EUK_OUT/${sample}.comp.filtered.unicorn.refstats";
-          logfile="$LOGS/${sample}__unicorn_refstats.log";
+      if [[ -s "$outbam" && -s "$outstat" ]]; then
+        echo "[SKIP] $sample: outputs exist and are non-empty" > "$logfile"
+      else
+        /projects/wintherpedersen/apps/unicorn/unicorn refstats \
+          -b "$inbam" \
+          -t "$THREADS" --minreads $REFSTATS_MINREADS \
+          --outbam "$outbam" \
+          --outstat "$outstat" \
+          --names "$TAX_PATH_NCBI/taxdump/names.dmp" \
+          --nodes "$TAX_PATH_NCBI/taxdump/nodes.dmp" \
+          > "$logfile" 2>&1
+      fi
+    '
+    check_success "Unicorn refstats"
 
-          if [[ -s "$outbam" && -s "$outstat" ]]; then
-            echo "[SKIP] $sample: outputs exist and are non-empty" > "$logfile"
-          else
-            /projects/wintherpedersen/apps/unicorn/unicorn refstats \
-              -b "$inbam" \
-              -t "$THREADS" --minreads 3 \
-              --outbam "$outbam" \
-              --outstat "$outstat" \
-              --names "$TAX_PATH_NCBI/taxdump/names.dmp" \
-              --nodes "$TAX_PATH_NCBI/taxdump/nodes.dmp" \
-              > "$logfile" 2>&1
-          fi
-        '
-        check_success "Unicorn refstats final filtering"
+    log_step "Running unicorn bamstats..."
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
+      "/projects/wintherpedersen/apps/unicorn/unicorn bamstats \
+         -b $EUK_OUT/{}.comp.unicorn.bam \
+         -t $THREADS \
+         --outbam $EUK_OUT/{}.comp.filtered.bam \
+         --outstat $EUK_OUT/{}.comp.filtered.unicorn.bamstats \
+         --printdists $EUK_OUT/{}.comp.filtered.unicorn \
+         > $LOGS/{}__unicorn_bamstats.log 2>&1"
+    check_success "Unicorn bamstats"
 
-        log_step "Running unicorn bamstats..."
+    if [ "$STORAGE_FRIENDLY" = true ]; then
+        log_step "Cleaning up intermediate Unicorn BAM files..."
         cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-          "/projects/wintherpedersen/apps/unicorn/unicorn bamstats \
-            -b $EUK_OUT/{}.comp.unicorn.bam \
-            -t $THREADS \
-            --outbam $EUK_OUT/{}.comp.filtered.bam \
-            --outstat $EUK_OUT/{}.comp.filtered.unicorn.bamstats \
-            --printdists $EUK_OUT/{}.comp.filtered.unicorn \
-            > $LOGS/{}__unicorn_bamstats.log 2>&1"
-        check_success "Unicorn bamstats final filtering"
-
-        if [ "$STORAGE_FRIENDLY" = true ]; then
-            log_step "Cleaning up intermediate BAM files..."
-            cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-              "rm -f \
-                 $EUK_OUT/{}.comp.bam \
-                 $EUK_OUT/{}.comp.unicorn.bam \
-                 > /dev/null 2> $LOGS/{}__cleanup_unicorn.log"
-            check_success "Cleanup intermediate Unicorn BAM files"
-        fi
-
-    else
-
-        log_step "Final filtering with filterBAM..."
-        cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-          "filterBAM filter \
-            -m 8G -t 12 -n 3 -A 92 -a 95 -N \
-            --bam \"$EUK_OUT/{}.qsort.comp.bam\" \
-            --stats \"$EUK_OUT/{}.comp.stats.tsv.gz\" \
-            --stats-filtered \"$EUK_OUT/{}.comp.stats-filtered.tsv.gz\" \
-            --bam-filtered \"$EUK_OUT/{}.comp.filtered.bam\" \
-            --tmp-dir \"$TMP\" \
-            --low-memory \
-            > \"$LOGS/{}__filterbam.log\" 2>&1"
-        check_success "Final filtering"
-
-        if [ "$STORAGE_FRIENDLY" = true ]; then
-            log_step "Cleaning up intermediate BAM files..."
-            cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-              "rm -f \
-                 $EUK_OUT/{}.comp.bam \
-                 $EUK_OUT/{}.sort.comp.bam \
-                 > /dev/null 2> $LOGS/{}__cleanup_filterbam.log"
-            check_success "Cleanup intermediate filterBAM BAM files"
-        fi
+          "rm -f \
+             $EUK_OUT/{}.comp.bam \
+             $EUK_OUT/{}.alnfilt.bam \
+             $EUK_OUT/{}.comp.unicorn.bam \
+             > /dev/null 2> $LOGS/{}__cleanup_unicorn.log"
+        check_success "Cleanup intermediate Unicorn BAM files"
     fi
+
 else
-    log_step "Skipping Unicorn/filterBAM as requested."
+    log_step "Skipping Stage 6 (BAM filtering) as requested."
 fi
+
+# ===========================================================
+# STAGE 7 — metaDMG (LCA, dfit, aggregate)
+# ===========================================================
 
 if [ "$SKIP_METADMG" = false ]; then
 
@@ -923,32 +1100,36 @@ if [ "$SKIP_METADMG" = false ]; then
             $EUK_OUT/{}.comp.filtered.bam"
     check_success "Sorting BAM file"
 
-    log_step "Running taxonomic classification with metaDMG..."
+    log_step "Running taxonomic classification with metaDMG (LCA)..."
     cat "$SAMPLE_LIST" | parallel --shell /bin/bash -j "$THREADSP" \
       "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp lca \
          --names $TAX_PATH_NCBI/taxdump/names.dmp \
          --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
          --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz /datasets/caeg_dataset/references/phylo_norway/20250127/*.acc2taxid.gz) \
-         --sim_score_low 0.95 --sim_score_high 1.0 --how_many 15 --weight_type 1 \
+         --sim_score_low $METADMG_EUK_SIM_SCORE_LOW \
+         --sim_score_high $METADMG_EUK_SIM_SCORE_HIGH \
+         --how_many $METADMG_EUK_HOW_MANY \
+         --weight_type $METADMG_EUK_WEIGHT_TYPE \
          --fix_ncbi 0 --threads 10 --filtered_acc2tax $EUK_OUT/{}.acc2tax \
          --bam $EUK_OUT/{}.sort.comp.filtered.bam \
          --out_prefix $EUK_OUT/{}.sort.comp.filtered \
          > $LOGS/{}__metadmg_lca.log 2>&1"
-    check_success "Taxonomic classification"
+    check_success "Taxonomic classification (LCA)"
 
-    log_step "Running damage estimation with metaDMG..."
+    log_step "Running damage estimation with metaDMG (dfit)..."
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
       "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp dfit \
          $EUK_OUT/{}.sort.comp.filtered.bdamage.gz --threads 6 \
          --names $TAX_PATH_NCBI/taxdump/names.dmp \
          --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
-         --showfits 2 --nopt 10 \
-         --nbootstrap 20 --doboot 1 --seed 1234 --lib ds \
+         --showfits 2 --nopt $METADMG_DFIT_NOPT \
+         --nbootstrap $METADMG_DFIT_NBOOTSTRAP \
+         --doboot 1 --seed $METADMG_DFIT_SEED --lib $METADMG_DFIT_LIB \
          --out_prefix $EUK_OUT/{}.sort.comp.filtered \
          > $LOGS/{}__metadmg_dfit.log 2>&1"
-    check_success "Damage calculations done"
+    check_success "Damage estimation (dfit)"
 
-    log_step "Aggregating lca and dfit metaDMG..."
+    log_step "Aggregating metaDMG LCA and dfit results..."
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
       "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp aggregate \
          $EUK_OUT/{}.sort.comp.filtered.bdamage.gz \
@@ -958,25 +1139,35 @@ if [ "$SKIP_METADMG" = false ]; then
          --dfit $EUK_OUT/{}.sort.comp.filtered.dfit.gz \
          --out_prefix $EUK_OUT/{}.sort.comp.filtered.agg \
          > $LOGS/{}__metadmg_agg.log 2>&1"
-    check_success "Aggregation done."
+    check_success "metaDMG aggregation"
 else
-  log_step "Skipping metaDMG steps as requested."
+  log_step "Skipping Stage 7 (metaDMG) as requested."
 fi
 
+# ===========================================================
+# STAGE 8 — Unicorn taxstats (family, genus, species)
+# ===========================================================
+
 if [ "$SKIP_UNICORN_TIDSTATS" = false ]; then
-    log_step "Unicorn per taxID statistics..."
-    cat "$SAMPLE_LIST" | parallel --shell /bin/bash -j "$THREADSP" \
-      "/projects/wintherpedersen/apps/unicorn/unicorn tidstats \
-         -b $EUK_OUT/{}.sort.comp.filtered.bam \
-         -t $THREADS \
-         -o $EUK_OUT/{}.comp.filtered.unicorn.tidstats \
-         --names $TAX_PATH_NCBI/taxdump/names.dmp \
-         --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
-         --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz /datasets/caeg_dataset/references/phylo_norway/20250127/*.acc2taxid.gz) \
-         > $LOGS/{}__unicorn_tidstats.log 2>&1"
-    check_success "Unicorn tidstats"
+
+    for rank in family genus species; do
+        log_step "Running unicorn taxstats at rank: ${rank}..."
+        cat "$SAMPLE_LIST" | parallel --shell /bin/bash -j "$THREADSP" \
+          "/projects/wintherpedersen/apps/unicorn/unicorn taxstats \
+             -b $EUK_OUT/{}.comp.filtered.bam \
+             -t $THREADS \
+             -o $EUK_OUT/{}.comp.filtered.${rank}.taxstats.bam \
+             --names $TAX_PATH_NCBI/taxdump/names.dmp \
+             --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
+             --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz /datasets/caeg_dataset/references/phylo_norway/20250127/*.acc2taxid.gz) \
+             -k $TAXSTATS_k --outstat $EUK_OUT/{}.comp.filtered.${rank}.taxstats \
+             --minreads $TAXSTATS_MINREADS --rank ${rank} \
+             > $LOGS/{}__unicorn_taxstats_${rank}.log 2>&1"
+        check_success "Unicorn taxstats (${rank})"
+    done
+
 else
-  log_step "Skipping unicorn tidstats as requested."
+  log_step "Skipping Stage 8 (unicorn taxstats) as requested."
 fi
 
 echo "Pipeline completed successfully." | tee -a "$LOG_FILE"

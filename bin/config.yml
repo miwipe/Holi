@@ -1,22 +1,125 @@
-# config.yml
+# ============================================================
+# Holi pipeline config
+# Rules:
+#   - Keys must start at column 1 (no indentation)
+#   - Use KEY: value format
+#   - No inline comments on value lines
+# ============================================================
 
-LOG_FILE: "ice_cores.log"
+# ----------------------------
+# Logging
+# ----------------------------
+LOG_FILE: /projects/caeg/people/bfj994/picareiro/logs/master_picareiro.log
 
-## Database paths 
-DB_PATH: "/datasets/caeg_dataset/references/ncbi/20250530/data/wgs_eukaryota"
-DB_PATH_clean: "/datasets/caeg_dataset/references/ncbi/20250530/data/"
-TAX_PATH_NCBI: "/datasets/caeg_dataset/references/ncbi/20250530/taxonomy/ncbi/"
-DB_PATH_Norwary: "/datasets/caeg_dataset/references/phylo_norway/20250127/results/shard"
-DB_PATH_bac: "/datasets/caeg_dataset/references/hires-organelles-viruses-smags/20240313/hires-organelles-viruses-smags"
-TAX_PATH_BAC_ACC: "/datasets/caeg_dataset/references/hires-organelles-viruses-smags/20240313/taxonomy/"
-TAX_PATH_BAC: "/datasets/caeg_dataset/references/hires-organelles-viruses-smags/20240313/taxonomy/hires-organelles-viruses-smags/"
+# ----------------------------
+# Threading
+# ----------------------------
+THREADSP: 5
+THREADS: 10
 
-## adjustable thread counts and output directories 
-THREADS: 10 
-THREADSP: 5 
-MICROB_OUT: "/projects/caeg/people/bfj994/CC_ice_core/microbial"
-EUK_OUT: "/projects/caeg/people/bfj994/CC_ice_core/eukaryotic"
-INPATH: "/projects/caeg/scratch/for_nicola/ice_core_raw_data"
-RESULT_PATH: "/projects/caeg/people/bfj994/CC_ice_core/res"
-LOGS: "/projects/caeg/people/bfj994/CC_ice_core/logs"
-TMP: "/projects/caeg/people/bfj994/CC_ice_core/tmp"
+# ----------------------------
+# Paths — input and output
+# ----------------------------
+INPATH: /projects/caeg/scratch/for_nicola/picareiro
+
+RESULT_PATH: /projects/caeg/people/bfj994/picareiro/res
+MICROB_OUT:  /projects/caeg/people/bfj994/picareiro/microbial
+EUK_OUT:     /projects/caeg/people/bfj994/picareiro/eukaryotic
+LOGS:        /projects/caeg/people/bfj994/picareiro/logs
+TMP:         /projects/caeg/people/bfj994/picareiro/temp
+
+# ----------------------------
+# Paths — databases
+# ----------------------------
+DB_PATH:         /datasets/caeg_dataset/references/ncbi/20250530/data/wgs_eukaryota
+DB_PATH_clean:   /datasets/caeg_dataset/references/ncbi/20250530/data/
+DB_PATH_Norwary: /datasets/caeg_dataset/references/phylo_norway/20250127/results/shard
+DB_PATH_bac:     /datasets/caeg_dataset/references/hires-organelles-viruses-smags/20240313/hires-organelles-viruses-smags
+
+# ----------------------------
+# Paths — taxonomy
+# ----------------------------
+TAX_PATH_NCBI:    /datasets/caeg_dataset/references/ncbi/20250530/taxonomy/ncbi/
+TAX_PATH_BAC:     /datasets/caeg_dataset/references/hires-organelles-viruses-smags/20240313/taxonomy/hires-organelles-viruses-smags/
+TAX_PATH_BAC_ACC: /datasets/caeg_dataset/references/hires-organelles-viruses-smags/20240313/taxonomy/
+
+# ----------------------------
+# Stage 1 — fastp
+# ----------------------------
+FASTP_QUAL: 30
+FASTP_MIN_AVG_QUAL: 25
+FASTP_MIN_LEN: 30
+FASTP_DUP_ACCURACY: 5
+
+# ----------------------------
+# Stage 1 — vsearch
+# ----------------------------
+VSEARCH_MIN_SEQLEN: 30
+
+# ----------------------------
+# Stage 1 — sga
+# ----------------------------
+SGA_DUST_THRESHOLD: 1
+SGA_MIN_LEN: 30
+
+# ----------------------------
+# Stage 2 — bowtie2 GTDB mapping
+# ----------------------------
+BT2_GTDB_k: 1000
+BT2_GTDB_D: 15
+BT2_GTDB_R: 2
+BT2_GTDB_N: 1
+BT2_GTDB_L: 22
+BT2_GTDB_i: S,1,1.15
+BT2_GTDB_np: 1
+BT2_GTDB_mp: 1,1
+BT2_GTDB_rdg: 0,1
+BT2_GTDB_rfg: 0,1
+BT2_GTDB_score_min: L,0,-0.1
+
+# ----------------------------
+# Stage 3 — metaDMG LCA (microbial split, used with --lca-assignment)
+# ----------------------------
+METADMG_BAC_SIM_SCORE_LOW: 0.92
+METADMG_BAC_SIM_SCORE_HIGH: 1.0
+METADMG_BAC_HOW_MANY: 15
+METADMG_BAC_WEIGHT_TYPE: 1
+
+# ----------------------------
+# Stage 4 — bowtie2 euk mapping
+# ----------------------------
+BT2_EUK_k: 1000
+
+# ----------------------------
+# Stage 6 — unicorn alnfilt
+# ----------------------------
+ALNFILT_MODE: ALLTOP
+ALNFILT_MINANI: 93.00
+ALNFILT_MAXANI: 100.00
+
+# ----------------------------
+# Stage 6 — unicorn refstats
+# ----------------------------
+REFSTATS_MINREADS: 3
+
+# ----------------------------
+# Stage 7 — metaDMG LCA (euk)
+# ----------------------------
+METADMG_EUK_SIM_SCORE_LOW: 0.95
+METADMG_EUK_SIM_SCORE_HIGH: 1.0
+METADMG_EUK_HOW_MANY: 15
+METADMG_EUK_WEIGHT_TYPE: 1
+
+# ----------------------------
+# Stage 7 — metaDMG dfit
+# ----------------------------
+METADMG_DFIT_NOPT: 10
+METADMG_DFIT_NBOOTSTRAP: 20
+METADMG_DFIT_SEED: 1234
+METADMG_DFIT_LIB: ds
+
+# ----------------------------
+# Stage 8 — unicorn taxstats
+# ----------------------------
+TAXSTATS_k: 17
+TAXSTATS_MINREADS: 10
