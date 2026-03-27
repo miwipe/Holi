@@ -1,5 +1,5 @@
 #!/bin/bash
-# Script: holi_prefilter.sh
+# Script: holi.sh
 # Description: Comprehensive automated pipeline for preprocessing, mapping, filtering, and taxonomic classification of FASTQ files.
 
 # -------------------------------
