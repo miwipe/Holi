@@ -1042,7 +1042,7 @@ if [ "$SKIP_BAM_FILTERING" = false ]; then
     cat "$SAMPLE_LIST" | parallel -j 1 '
       sample={};
       inbam="$EUK_OUT/${sample}.alnfilt.bam";
-      outbam="$EUK_OUT/${sample}.comp.unicorn.bam";
+      outbam="$EUK_OUT/${sample}.alnfilt.unicorn.bam";
       outstat="$EUK_OUT/${sample}.comp.unicorn.refstats";
       logfile="$LOGS/${sample}__unicorn_refstats.log";
 
@@ -1064,9 +1064,9 @@ if [ "$SKIP_BAM_FILTERING" = false ]; then
     log_step "Running unicorn bamstats..."
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
       "/projects/wintherpedersen/apps/unicorn/unicorn bamstats \
-         -b $EUK_OUT/{}.comp.unicorn.bam \
+         -b $EUK_OUT/{}.alnfilt.unicorn.bam \
          -t $THREADS \
-         --outbam $EUK_OUT/{}.comp.filtered.bam \
+         --outbam $EUK_OUT/{}.bamfilt.unicorn.bam \
          --outstat $EUK_OUT/{}.comp.filtered.unicorn.bamstats \
          --printdists $EUK_OUT/{}.comp.filtered.unicorn \
          > $LOGS/{}__unicorn_bamstats.log 2>&1"
@@ -1078,7 +1078,7 @@ if [ "$SKIP_BAM_FILTERING" = false ]; then
           "rm -f \
              $EUK_OUT/{}.comp.bam \
              $EUK_OUT/{}.alnfilt.bam \
-             $EUK_OUT/{}.comp.unicorn.bam \
+             $EUK_OUT/{}.alnfilt.unicorn.bam \
              > /dev/null 2> $LOGS/{}__cleanup_unicorn.log"
         check_success "Cleanup intermediate Unicorn BAM files"
     fi
@@ -1097,7 +1097,7 @@ if [ "$SKIP_METADMG" = false ]; then
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
       "samtools sort -n -@ $THREADS -m 10G \
          -o $EUK_OUT/{}.sort.comp.filtered.bam \
-            $EUK_OUT/{}.comp.filtered.bam"
+            $EUK_OUT/{}.alnfilt.unicorn.bam"
     check_success "Sorting BAM file"
 
     log_step "Running taxonomic classification with metaDMG (LCA)..."
