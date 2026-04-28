@@ -903,7 +903,7 @@ if [ "$SKIP_COMP_MERGE" = false ]; then
             dir=$(dirname "$bam")
             outpath="$dir/${base}.comp.bam"
 
-            /projects/wintherpedersen/apps/metaDMG_14jun24/metaDMG-cpp/misc/compressbam \
+            /projects/caeg/apps/metaDMG_300326/metaDMG-cpp/misc/compressbam \
               --threads 12 \
               --input "$bam" \
               --output "$outpath" \
@@ -940,7 +940,7 @@ if [ "$SKIP_COMP_MERGE" = false ]; then
 
     log_step "Compressing merged SAM..."
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-      "/projects/wintherpedersen/apps/metaDMG_14jun24/metaDMG-cpp/misc/compressbam \
+      "/projects/caeg/apps/metaDMG_300326/metaDMG-cpp/misc/compressbam \
          --threads 12 \
          --input $EUK_OUT/{}.comp.sam.gz \
          --output $EUK_OUT/{}.comp.bam \
@@ -1026,7 +1026,7 @@ if [ "$SKIP_BAM_FILTERING" = false ]; then
 
     log_step "Running unicorn alnfilt..."
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-      "/projects/wintherpedersen/apps/unicorn/unicorn alnfilt \
+      "/projects/caeg/apps/unicorn_300326/unicorn/unicorn alnfilt \
          -b $EUK_OUT/{}.comp.bam \
          -t $THREADS --mode $ALNFILT_MODE \
          --outbam $EUK_OUT/{}.alnfilt.bam \
@@ -1037,9 +1037,9 @@ if [ "$SKIP_BAM_FILTERING" = false ]; then
 
     log_step "Running unicorn refstats..."
 
-    export EUK_OUT LOGS TAX_PATH_NCBI THREADS
+    export EUK_OUT LOGS TAX_PATH_NCBI THREADS REFSTATS_MINREADS
 
-    cat "$SAMPLE_LIST" | parallel -j 1 '
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" '
       sample={};
       inbam="$EUK_OUT/${sample}.alnfilt.bam";
       outbam="$EUK_OUT/${sample}.alnfilt.unicorn.bam";
@@ -1049,7 +1049,7 @@ if [ "$SKIP_BAM_FILTERING" = false ]; then
       if [[ -s "$outbam" && -s "$outstat" ]]; then
         echo "[SKIP] $sample: outputs exist and are non-empty" > "$logfile"
       else
-        /projects/wintherpedersen/apps/unicorn/unicorn refstats \
+        /projects/caeg/apps/unicorn_300326/unicorn/unicorn refstats \
           -b "$inbam" \
           -t "$THREADS" --minreads $REFSTATS_MINREADS \
           --outbam "$outbam" \
@@ -1061,23 +1061,11 @@ if [ "$SKIP_BAM_FILTERING" = false ]; then
     '
     check_success "Unicorn refstats"
 
-    log_step "Running unicorn bamstats..."
-    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-      "/projects/wintherpedersen/apps/unicorn/unicorn bamstats \
-         -b $EUK_OUT/{}.alnfilt.unicorn.bam \
-         -t $THREADS \
-         --outbam $EUK_OUT/{}.bamfilt.unicorn.bam \
-         --outstat $EUK_OUT/{}.comp.filtered.unicorn.bamstats \
-         --printdists $EUK_OUT/{}.comp.filtered.unicorn \
-         > $LOGS/{}__unicorn_bamstats.log 2>&1"
-    check_success "Unicorn bamstats"
-
     if [ "$STORAGE_FRIENDLY" = true ]; then
         log_step "Cleaning up intermediate Unicorn BAM files..."
         cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
           "rm -f \
              $EUK_OUT/{}.comp.bam \
-             $EUK_OUT/{}.alnfilt.bam \
              $EUK_OUT/{}.alnfilt.unicorn.bam \
              > /dev/null 2> $LOGS/{}__cleanup_unicorn.log"
         check_success "Cleanup intermediate Unicorn BAM files"
@@ -1097,12 +1085,12 @@ if [ "$SKIP_METADMG" = false ]; then
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
       "samtools sort -n -@ $THREADS -m 10G \
          -o $EUK_OUT/{}.sort.comp.filtered.bam \
-            $EUK_OUT/{}.alnfilt.unicorn.bam"
+            $EUK_OUT/{}.alnfilt.bam"
     check_success "Sorting BAM file"
 
     log_step "Running taxonomic classification with metaDMG (LCA)..."
     cat "$SAMPLE_LIST" | parallel --shell /bin/bash -j "$THREADSP" \
-      "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp lca \
+      "/projects/caeg/apps/metaDMG_300326/metaDMG-cpp/metaDMG-cpp lca \
          --names $TAX_PATH_NCBI/taxdump/names.dmp \
          --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
          --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz /datasets/caeg_dataset/references/phylo_norway/20250127/*.acc2taxid.gz) \
@@ -1118,7 +1106,7 @@ if [ "$SKIP_METADMG" = false ]; then
 
     log_step "Running damage estimation with metaDMG (dfit)..."
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-      "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp dfit \
+      "/projects/caeg/apps/metaDMG_300326/metaDMG-cpp/metaDMG-cpp dfit \
          $EUK_OUT/{}.sort.comp.filtered.bdamage.gz --threads 6 \
          --names $TAX_PATH_NCBI/taxdump/names.dmp \
          --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
@@ -1131,7 +1119,7 @@ if [ "$SKIP_METADMG" = false ]; then
 
     log_step "Aggregating metaDMG LCA and dfit results..."
     cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-      "/projects/wintherpedersen/apps/metaDMG_28Nov24/metaDMG-cpp aggregate \
+      "/projects/caeg/apps/metaDMG_300326/metaDMG-cpp/metaDMG-cpp aggregate \
          $EUK_OUT/{}.sort.comp.filtered.bdamage.gz \
          --names $TAX_PATH_NCBI/taxdump/names.dmp \
          --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
@@ -1153,8 +1141,8 @@ if [ "$SKIP_UNICORN_TIDSTATS" = false ]; then
     for rank in family genus species; do
         log_step "Running unicorn taxstats at rank: ${rank}..."
         cat "$SAMPLE_LIST" | parallel --shell /bin/bash -j "$THREADSP" \
-          "/projects/wintherpedersen/apps/unicorn/unicorn taxstats \
-             -b $EUK_OUT/{}.comp.filtered.bam \
+          "/projects/caeg/apps/unicorn_300326/unicorn/unicorn taxstats \
+             -b $EUK_OUT/{}.alnfilt.bam \
              -t $THREADS \
              -o $EUK_OUT/{}.comp.filtered.${rank}.taxstats.bam \
              --names $TAX_PATH_NCBI/taxdump/names.dmp \
