@@ -1089,7 +1089,7 @@ if [ "$SKIP_METADMG" = false ]; then
     check_success "Sorting BAM file"
 
     log_step "Running taxonomic classification with metaDMG (LCA)..."
-    cat "$SAMPLE_LIST" | parallel --shell /bin/bash -j "$THREADSP" \
+    cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
       "/projects/caeg/apps/metaDMG_300326/metaDMG-cpp/metaDMG-cpp lca \
          --names $TAX_PATH_NCBI/taxdump/names.dmp \
          --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
@@ -1140,7 +1140,7 @@ if [ "$SKIP_UNICORN_TIDSTATS" = false ]; then
 
     for rank in family genus species; do
         log_step "Running unicorn taxstats at rank: ${rank}..."
-        cat "$SAMPLE_LIST" | parallel --shell /bin/bash -j "$THREADSP" \
+        cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
           "/projects/caeg/apps/unicorn_300326/unicorn/unicorn taxstats \
              -b $EUK_OUT/{}.alnfilt.bam \
              -t $THREADS \
