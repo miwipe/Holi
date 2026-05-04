@@ -696,7 +696,7 @@ if [ "$SKIP_MICROBIAL_SPLIT" = false ]; then
         check_success "Extracting all read IDs"
 
         log_step "Computing eukaryotic read set..."
-        parallel --shell /bin/bash -j "$THREADSP" "\
+        parallel -j "$THREADSP" "\
             comm -23 <(sort $MICROB_OUT/{}.all_reads.txt) \
                      <(sort $MICROB_OUT/{}.bact_reads.txt) \
                 > $EUK_OUT/{}.euk_reads.txt \
