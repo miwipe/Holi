@@ -1112,7 +1112,7 @@ if [ "$SKIP_METADMG" = false ]; then
          --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
          --showfits 2 --nopt $METADMG_DFIT_NOPT \
          --nbootstrap $METADMG_DFIT_NBOOTSTRAP \
-         --doboot 1 --seed $METADMG_DFIT_SEED --lib $METADMG_DFIT_LIB \
+         --seed $METADMG_DFIT_SEED --lib $METADMG_DFIT_LIB \
          --out_prefix $EUK_OUT/{}.sort.comp.filtered \
          > $LOGS/{}__metadmg_dfit.log 2>&1"
     check_success "Damage estimation (dfit)"
