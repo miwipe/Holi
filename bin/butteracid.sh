@@ -299,7 +299,7 @@ case "$MODE" in
         Rscript butteracid_bamfilter.R "$CONFIG_FILE"
         ;;
     unicorn)
-        #Rscript butteracid_unicorn.R "$CONFIG_FILE"
+        Rscript butteracid_unicorn.R "$CONFIG_FILE"
         ;;
     *)
         echo "[ERROR] Unknown MODE: '$MODE'. Expected 'bamfilter' or 'unicorn'." >&2
