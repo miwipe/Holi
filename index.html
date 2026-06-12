@@ -433,6 +433,10 @@ function confFor(name){
   return Object.assign({},CONF_BASE,
     {toImageButtonOptions:Object.assign({},CONF_BASE.toImageButtonOptions,{filename:name})});
 }
+// Only clear the container when it's NOT already a Plotly graph (e.g. it holds the
+// "no data" placeholder). Wiping a live graph's DOM and then calling Plotly.react on it
+// can throw — especially for the scattergeo map. When a graph exists, let react update it.
+function prepPlot(el){ if(el && !el.classList.contains('js-plotly-plot')) el.innerHTML=''; }
 
 // ---------- MAP ----------
 function drawMap(rows){
@@ -441,7 +445,7 @@ function drawMap(rows){
   const symBy=document.getElementById('mapSymbol').value;
   const labels=document.getElementById('mapLabels').checked;
   if(!rows.length){ Plotly.purge(el); el.innerHTML='<div class="empty">No sites match the current filter.</div>'; return; }
-  el.innerHTML='';
+  prepPlot(el);
   const symVals = symBy ? [...new Set(rows.map(r=>clean(r[symBy])))].sort() : [];
   const symOf = v => symVals.length? SYMBOLS[symVals.indexOf(v)%SYMBOLS.length] : 'circle';
   const groups={};
@@ -483,7 +487,7 @@ function drawYear(rows){
   const years=[]; for(let y=lo;y<=hi;y++) years.push(y);
   const methods=Object.keys(by).sort();
   if(!methods.length){ Plotly.purge(el); el.innerHTML='<div class="empty">No publications match.</div>'; return; }
-  el.innerHTML='';
+  prepPlot(el);
   const traces=methods.map(m=>({
     type:'bar', name:m, x:years, y:years.map(y=>(by[m][y]||0)),
     marker:{color:colorFor(m)} }));
@@ -501,7 +505,7 @@ function drawCum(rows){
   const lo=state.yMin, hi=state.yMax; const years=[]; for(let y=lo;y<=hi;y++) years.push(y);
   const methods=Object.keys(by).sort();
   if(!methods.length){ Plotly.purge(el); el.innerHTML='<div class="empty">No publications match.</div>'; return; }
-  el.innerHTML='';
+  prepPlot(el);
   const traces=methods.map(m=>{ let c=0; const cum=years.map(y=>{c+=(by[m][y]||0);return c;});
     return {type:'scatter',mode:'lines',name:m,x:years,y:cum,stackgroup:'one',
       line:{width:.5,color:colorFor(m)},fillcolor:colorFor(m)+'cc'}; });
@@ -518,7 +522,7 @@ function drawCountBar(elId,rows,field,title,color){
   const counts=countDistinct(rows,field);
   let entries=Object.entries(counts).sort((a,b)=>a[1]-b[1]);
   if(!entries.length){ Plotly.purge(el); el.innerHTML='<div class="empty">No data in current filter.</div>'; return; }
-  el.innerHTML='';
+  prepPlot(el);
   const trace={ type:'bar', orientation:'h',
     y:entries.map(e=>e[0]), x:entries.map(e=>e[1]),
     marker:{color:color}, text:entries.map(e=>e[1]), textposition:'outside',
@@ -560,8 +564,8 @@ function render(){
   safe(()=>drawMap(rows),'map');
   safe(()=>drawYear(rows),'year');
   safe(()=>drawCum(rows),'cum');
-  safe(()=>drawCountBar('cDb',rows,'reference_target','Publications by reference database','#5ec8e0'),'db');
-  safe(()=>drawCountBar('cMap',rows,'mapper','Publications by mapper','#d08a4f'),'mapper');
+  safe(()=>drawCountBar('cDb',rows,'reference_target','Publications by reference database','#a78bdb'),'db');
+  safe(()=>drawCountBar('cMap',rows,'mapper','Publications by mapper','#5fb3a3'),'mapper');
 }
 
 // ---------- init / data load ----------
