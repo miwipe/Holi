@@ -232,9 +232,18 @@ footer{border-top:1px solid var(--line);margin-top:36px;padding:26px 0 50px;colo
     </div>
     <div class="datarow">
       <span class="src" id="srcLabel">Source: full published table embedded · <b id="srcCount">0</b> site records</span>
+      <button class="upload" id="sheetRefresh" type="button">↻ Refresh from Google Sheet</button>
+      <button class="upload" id="tableDownload" type="button">⤓ Download table (filtered .csv)</button>
       <label class="upload">⤓ Load full / updated table (.tsv or .csv)
         <input type="file" id="fileIn" accept=".tsv,.csv,.txt">
       </label>
+      <label class="src" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="sheetAuto" checked> auto-load the live sheet on open
+      </label>
+      <input type="text" id="sheetUrl" placeholder="Optional: paste a different “Publish to web → CSV” link to override"
+             style="flex:1 1 340px;min-width:200px;background:var(--ink);border:1px solid rgba(159,179,200,.25);
+                    color:var(--ice);border-radius:8px;padding:7px 10px;font-family:'JetBrains Mono',monospace;font-size:11.5px">
+      <span class="src">Live data loads from the published Google Sheet automatically; edits appear within a few minutes.</span>
       <span class="src">Headers must match the project sheet (SiteName, Latitude, Longitude, DOI, year_published, MolecularMethod, …)</span>
     </div>
   </div>
@@ -416,7 +425,13 @@ function baseLayout(extra){
     title:{font:{color:T.ice,family:'"Space Grotesk",sans-serif',size:15},x:0,xanchor:'left'}
   }, extra||{});
 }
-const CONF={responsive:true,displayModeBar:false};
+const CONF_BASE={responsive:true,displaylogo:false,
+  modeBarButtonsToRemove:['lasso2d','select2d','zoomIn2d','zoomOut2d','autoScale2d','toggleSpikelines'],
+  toImageButtonOptions:{format:'png',scale:2}};
+function confFor(name){
+  return Object.assign({},CONF_BASE,
+    {toImageButtonOptions:Object.assign({},CONF_BASE.toImageButtonOptions,{filename:name})});
+}
 
 // ---------- MAP ----------
 function drawMap(rows){
@@ -456,7 +471,7 @@ function drawMap(rows){
       lonaxis:{showgrid:true,gridcolor:'#1b2530'} },
     legend:{font:{color:T.frost,size:11},bgcolor:'rgba(15,21,29,.6)',y:.5}
   });
-  Plotly.react(el,traces,layout,CONF);
+  Plotly.react(el,traces,layout,confFor('holi_map'));
 }
 
 // ---------- YEAR (stacked by method) ----------
@@ -475,7 +490,7 @@ function drawYear(rows){
     xaxis:{gridcolor:T.line,linecolor:T.line,tickfont:{color:T.dim},dtick:1,title:{text:'Year',font:{color:T.dim,size:11}}},
     yaxis:{gridcolor:T.line,linecolor:T.line,tickfont:{color:T.dim},title:{text:'Publications',font:{color:T.dim,size:11}}},
     legend:{orientation:'h',y:1.12,x:0} });
-  Plotly.react(el,traces,layout,CONF);
+  Plotly.react(el,traces,layout,confFor('holi_publications_by_year_method'));
 }
 
 // ---------- CUMULATIVE ----------
@@ -493,7 +508,7 @@ function drawCum(rows){
     xaxis:{gridcolor:T.line,linecolor:T.line,tickfont:{color:T.dim},dtick:1,title:{text:'Year',font:{color:T.dim,size:11}}},
     yaxis:{gridcolor:T.line,linecolor:T.line,tickfont:{color:T.dim},title:{text:'Cumulative',font:{color:T.dim,size:11}}},
     legend:{orientation:'h',y:1.12,x:0} });
-  Plotly.react(el,traces,layout,CONF);
+  Plotly.react(el,traces,layout,confFor('holi_cumulative_by_method'));
 }
 
 // ---------- horizontal count bars ----------
@@ -512,7 +527,7 @@ function drawCountBar(elId,rows,field,title,color){
     margin:{l:170,r:30,t:34,b:40},
     xaxis:{gridcolor:T.line,linecolor:T.line,tickfont:{color:T.dim},title:{text:'Publications',font:{color:T.dim,size:11}}},
     yaxis:{linecolor:T.line,tickfont:{color:T.frost,size:11},automargin:true} });
-  Plotly.react(el,[trace],layout,CONF);
+  Plotly.react(el,[trace],layout,confFor('holi_'+title.toLowerCase().replace(/[^a-z0-9]+/g,'_').replace(/^_|_$/g,'')));
 }
 
 // ---------- stat strip ----------
@@ -586,6 +601,88 @@ document.getElementById('fileIn').onchange=e=>{
   rd.readAsText(f);
 };
 
+// ---------- live Google Sheet ----------
+const SHEET_ID = "13cmBUi4cigUaTKtQeFLFvS0gXT8AeWxWKzHv2UcOBCI";
+let   SHEET_GID = "0";   // gid of the DATA tab — the number after #gid= in the sheet's URL
+// "Publish to web → CSV" link (CORS-friendly). This is what loads live by default.
+const PUBLISHED_CSV_URL = "https://docs.google.com/spreadsheets/d/e/2PACX-1vQXmAeJPrjrUQtRSqeipWDUA5zanFtrb_tOwkyzTHm2TkWCv493GH4wzInB-E-Ny5XxiUxYCmesAh8g/pub?output=csv";
+const SHEET_URL_KEY = "holi_sheet_csv_url";
+
+// restore a previously pasted "Publish to web" CSV link, if any
+try{ const saved=localStorage.getItem(SHEET_URL_KEY);
+     if(saved){ const f=document.getElementById('sheetUrl'); if(f) f.value=saved; } }catch(e){}
+(function(){ const f=document.getElementById('sheetUrl');
+  if(f) f.addEventListener('change',()=>{ try{ localStorage.setItem(SHEET_URL_KEY, f.value.trim()); }catch(e){} }); })();
+
+function sheetUrls(){
+  const urls=[];
+  const f=document.getElementById('sheetUrl');
+  const pasted=f && f.value.trim();
+  if(pasted) urls.push(pasted);                                  // optional override
+  if(PUBLISHED_CSV_URL) urls.push(PUBLISHED_CSV_URL);            // the published default (CORS-friendly)
+  urls.push(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${SHEET_GID}`);
+  urls.push(`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`);
+  return urls;
+}
+function setSrc(html){ const el=document.getElementById('srcLabel'); if(el) el.innerHTML=html; }
+function srcEmbedded(note){
+  setSrc('Source: embedded snapshot · <b id="srcCount">'+ROWS.length+'</b> site records'+(note?' · '+note:''));
+}
+async function fetchSheetRows(){
+  for(const url of sheetUrls()){
+    try{
+      const ctrl=new AbortController(); const t=setTimeout(()=>ctrl.abort(),9000);
+      const res=await fetch(url,{signal:ctrl.signal,credentials:'omit'}); clearTimeout(t);
+      if(!res.ok) continue;
+      const text=await res.text();
+      if(/^\s*</.test(text)) continue;              // an HTML login/error page, not CSV
+      const parsed=parseDelimited(text);
+      const ok=parsed.filter(r=>r.Latitude&&r.Longitude&&!isNaN(parseFloat(r.Latitude)));
+      if(ok.length) return ok;
+    }catch(e){ /* CORS / offline / aborted — try next endpoint */ }
+  }
+  return null;
+}
+async function refreshFromSheet(silent){
+  setSrc('Source: checking Google Sheet… · showing <b id="srcCount">'+ROWS.length+'</b> embedded records');
+  const rows=await fetchSheetRows();
+  if(rows){
+    ROWS=rows; initFromData(); render();
+    setSrc('Source: live Google Sheet · <b id="srcCount">'+ROWS.length+'</b> site records · loaded '+new Date().toLocaleString());
+  } else {
+    srcEmbedded('live sheet not reachable from the browser');
+    if(!silent) alert(
+      'Could not load the live Google Sheet.\n\n'+
+      'A browser usually cannot read a sheet just from "Anyone with the link" — Google blocks it (CORS).\n\n'+
+      'To enable live loading:\n'+
+      '  1. Open the sheet → File → Share → Publish to web\n'+
+      '  2. Choose the data tab and the "Comma-separated values (.csv)" format\n'+
+      '  3. Copy the link it gives you (it contains "/pub?...output=csv")\n'+
+      '  4. Paste it into the box next to the Refresh button\n\n'+
+      'Showing the embedded snapshot for now.');
+  }
+}
+document.getElementById('sheetRefresh').onclick=()=>refreshFromSheet(false);
+
+// ---------- download the (filtered) literature table ----------
+function downloadFilteredCSV(){
+  const rows=ROWS.filter(passFilters);
+  if(!rows.length){ alert('No rows match the current filters — nothing to download.'); return; }
+  // union of columns across rows, preserving first-seen order
+  const seen=new Set(), cols=[];
+  rows.forEach(r=>Object.keys(r).forEach(k=>{ if(!seen.has(k)){ seen.add(k); cols.push(k);} }));
+  const esc=v=>{ v=(v==null?'':String(v)); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; };
+  const lines=[cols.map(esc).join(',')];
+  rows.forEach(r=>lines.push(cols.map(c=>esc(r[c])).join(',')));
+  const blob=new Blob(['\ufeff'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url; a.download='holi_filtered_'+rows.length+'_sites.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
+document.getElementById('tableDownload').onclick=downloadFilteredCSV;
+
 // ---------- Plotly loader (embedded inline above; CDNs are a last-resort fallback) ----------
 const PLOTLY_CDNS = [
   "https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.2/plotly.min.js",
@@ -626,7 +723,11 @@ updateStats(ROWS.filter(passFilters));
   document.getElementById(id).addEventListener('change',()=>{
     if(typeof Plotly!=='undefined') drawMap(ROWS.filter(passFilters)); }));
 window.addEventListener('resize',()=>{ /* plotly responsive handles it */ });
-loadPlotly(()=>render());
+loadPlotly(()=>{
+  render();                                  // embedded snapshot renders immediately
+  const auto=document.getElementById('sheetAuto');
+  if(auto && auto.checked) refreshFromSheet(true);   // then quietly try the live sheet
+});
 </script>
 </body>
 </html>
