@@ -351,9 +351,9 @@ function buildChips(){
     vals.forEach(v=>{
       const c=document.createElement('span');
       c.className='chip on'+(rustOn?' rust':''); c.textContent=v;
-      state[key].add(v);
-      c.onclick=()=>{ if(state[key].has(v)){state[key].delete(v);c.classList.remove('on');}
-                      else{state[key].add(v);c.classList.add('on');} render(); };
+      // chips start selected; clicking moves the value in/out of the excluded set
+      c.onclick=()=>{ if(state[key].has(v)){ state[key].delete(v); c.classList.add('on'); }
+                      else { state[key].add(v); c.classList.remove('on'); } render(); };
       host.appendChild(c);
     });
   };
@@ -364,8 +364,7 @@ function buildChips(){
 document.querySelectorAll('[data-all]').forEach(b=>{
   b.onclick=()=>{ const k=b.dataset.all;
     const host={method:'fMethod',group:'fGroup',sample:'fSample'}[k];
-    const vals=distinct({method:'MolecularMethod',group:'TargetGroup',sample:'SampleType'}[k]);
-    vals.forEach(v=>state[k].add(v));
+    state[k].clear();                                   // exclude nothing = select all
     document.querySelectorAll('#'+host+' .chip').forEach(c=>c.classList.add('on'));
     render();
   };
@@ -386,12 +385,14 @@ function setupYears(){
 }
 document.getElementById('resetAll').onclick=()=>{ initFromData(); render(); };
 
+// filter state holds the DE-SELECTED (excluded) values per facet;
+// empty set = nothing excluded = everything shown (including blank cells)
 function passFilters(r){
   const y=parseInt(r.year_published);
   if(!isNaN(y) && (y<state.yMin||y>state.yMax)) return false;
-  if(state.method.size && !state.method.has(clean(r.MolecularMethod))) return false;
-  if(state.group.size && !state.group.has(clean(r.TargetGroup))) return false;
-  if(state.sample.size && !state.sample.has(clean(r.SampleType))) return false;
+  if(state.method.has(clean(r.MolecularMethod))) return false;
+  if(state.group.has(clean(r.TargetGroup))) return false;
+  if(state.sample.has(clean(r.SampleType))) return false;
   return true;
 }
 
@@ -425,7 +426,7 @@ function baseLayout(extra){
     title:{font:{color:T.ice,family:'"Space Grotesk",sans-serif',size:15},x:0,xanchor:'left'}
   }, extra||{});
 }
-const CONF_BASE={responsive:true,displaylogo:false,
+const CONF_BASE={responsive:true,displaylogo:false,displayModeBar:true,
   modeBarButtonsToRemove:['lasso2d','select2d','zoomIn2d','zoomOut2d','autoScale2d','toggleSpikelines'],
   toImageButtonOptions:{format:'png',scale:2}};
 function confFor(name){
@@ -555,11 +556,12 @@ function render(){
   const rows=ROWS.filter(passFilters);
   updateStats(rows);                 // pure DOM, safe without Plotly
   if(typeof Plotly==='undefined'){ showPlotlyBanner(); return; }
-  drawMap(rows);
-  drawYear(rows);
-  drawCum(rows);
-  drawCountBar('cDb',rows,'reference_target','Publications by reference database','#5ec8e0');
-  drawCountBar('cMap',rows,'mapper','Publications by mapper','#d08a4f');
+  const safe=(fn,name)=>{ try{ fn(); }catch(e){ console.error('render('+name+') failed:',e); } };
+  safe(()=>drawMap(rows),'map');
+  safe(()=>drawYear(rows),'year');
+  safe(()=>drawCum(rows),'cum');
+  safe(()=>drawCountBar('cDb',rows,'reference_target','Publications by reference database','#5ec8e0'),'db');
+  safe(()=>drawCountBar('cMap',rows,'mapper','Publications by mapper','#d08a4f'),'mapper');
 }
 
 // ---------- init / data load ----------
