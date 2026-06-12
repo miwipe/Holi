@@ -27,6 +27,8 @@ We define ancient environmental samples as those containing genetic material fro
 
 Our aim is for this resource to be continuously updated and valuable to the research community. The complete list is available [here](https://docs.google.com/spreadsheets/d/13cmBUi4cigUaTKtQeFLFvS0gXT8AeWxWKzHv2UcOBCI/edit?usp=sharing). If you find errors or missing publications, feel free to leave comments in the Google Sheet. Below, we provide a visual summary of where studies have been conducted worldwide, the annual publication trends, and the proportion of studies employing the two main analytical strategies.
 
+### 🌍 [Open the interactive Holi explorer →](https://miwipe.github.io/Holi/)
+
 ![Worldmap of study sites in which ancient metagenomic data has been published](figures/SG_TE_map_method.png)
 
 ![Worldmap of study sites in which ancient metagenomic data has been published categorized by sample type](figures/SG_TE_map_SampleType_Target.png)
