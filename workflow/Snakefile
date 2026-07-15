@@ -1,0 +1,34 @@
+from snakemake.exceptions import WorkflowError
+
+configfile: "config/config.yaml"
+
+# Several rules use bash process substitution (<(...)) to merge acc2taxid
+# globs on the fly, exactly like the original bin/holi.sh did.
+shell.executable("/bin/bash")
+shell.prefix("set -euo pipefail; ")
+
+include: "rules/common.smk"
+include: "rules/preprocessing.smk"
+include: "rules/gtdb_mapping.smk"
+include: "rules/microbial_split.smk"
+include: "rules/euk_mapping.smk"
+include: "rules/comp_merge.smk"
+include: "rules/bam_filtering.smk"
+include: "rules/metadmg.smk"
+include: "rules/taxstats.smk"
+
+
+rule all:
+    input:
+        # Stage 8 taxstats tables — the final deliverable of the pipeline,
+        # one per sample per taxonomic rank.
+        expand(
+            f"{EUK_OUT}/{{sample}}.comp.filtered.{{rank}}.taxstats",
+            sample=SAMPLES,
+            rank=config["taxstats"]["ranks"],
+        ),
+        # Stage 7 metaDMG aggregate output, also a top-level deliverable.
+        expand(
+            f"{EUK_OUT}/{{sample}}.sort.comp.filtered.agg.stat.gz",
+            sample=SAMPLES,
+        ),

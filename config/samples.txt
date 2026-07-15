@@ -1,0 +1,4 @@
+# One sample name per line, matching your FASTQ file prefixes.
+# Lines starting with # are ignored. Replace with your real samples.
+sample1
+sample2

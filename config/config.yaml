@@ -1,0 +1,180 @@
+# ============================================================
+# Holi Snakemake pipeline configuration
+#
+# This is the Snakemake port of bin/holi.sh (the 8-stage shotgun
+# metagenomics pipeline). Every path and parameter that used to be
+# a variable in bin/config.yml lives here. Edit the paths below to
+# match your system before running.
+# ============================================================
+
+# ----------------------------
+# Samples
+# ----------------------------
+# Plain text file, one sample name per line (same format as the
+# old SAMPLE_LIST argument to holi.sh).
+samples: "config/samples.txt"
+
+# true  = single-end reads, matched as INPATH/*_<sample>_*R1*_001.fastq.gz
+# false = paired-end reads, matched as INPATH/<sample>*R1*.fastq.gz / *R2*.fastq.gz
+#         and merged with fastp
+single_end: false
+
+# false = split microbial/eukaryotic reads with getRTax (default)
+# true  = split using metaDMG LCA instead
+lca_assignment: false
+
+# ----------------------------
+# Threading
+# ----------------------------
+# Threads handed to each individual tool invocation (bowtie2 -p, samtools -@, ...).
+# Snakemake's own --cores flag controls how many samples/rules run concurrently.
+threads_per_job: 10
+
+# ----------------------------
+# Paths — input and output
+# ----------------------------
+inpath: "/path/to/raw_fastq"
+
+result_path: "results"
+microb_out: "results/microbial"
+euk_out: "results/eukaryotic"
+logs: "results/logs"
+tmp: "results/tmp"
+
+# ----------------------------
+# Databases
+# ----------------------------
+# GTDB (bacteria/archaea/viruses), split into N .fas.gz chunks named
+# "<db_path_bac>.<chunk>.fas.gz"
+db_path_bac: "/path/to/hires-organelles-viruses-smags/hires-organelles-viruses-smags"
+n_gtdb_chunks: 7
+
+# Eukaryote WGS database, split into N .fas.gz chunks named "<db_path>.<chunk>.fas.gz"
+db_path: "/path/to/ncbi/data/wgs_eukaryota"
+n_euk_chunks: 129
+
+# Directory containing refseq_mitochondrion.genomic.fas.gz, core_nt.fas.gz,
+# and refseq_plastid.genomic.fas.gz
+db_path_clean: "/path/to/ncbi/data"
+
+# Phylo-Norway database, split into N shards named "<db_path_norway>.<chunk>-of-10"
+db_path_norway: "/path/to/phylo_norway/results/shard"
+n_norway_chunks: 10
+
+# ----------------------------
+# Taxonomy
+# ----------------------------
+tax_path_ncbi: "/path/to/ncbi/taxonomy/ncbi"
+tax_path_bac: "/path/to/hires-organelles-viruses-smags/taxonomy/hires-organelles-viruses-smags"
+tax_path_bac_acc: "/path/to/hires-organelles-viruses-smags/taxonomy"
+# Directory containing extra *.acc2taxid.gz files (e.g. phylo-norway) that get
+# merged with tax_path_ncbi's during metaDMG lca/unicorn taxstats steps.
+tax_path_norway_acc: "/path/to/phylo_norway/results"
+
+# ----------------------------
+# Tool binaries — edit if a tool isn't on PATH
+# ----------------------------
+tools:
+  fastp: "fastp"
+  vsearch: "vsearch"
+  sga: "sga"
+  bowtie2: "bowtie2"
+  samtools: "samtools"
+  seqtk: "seqtk"
+  getRTax: "getRTax"
+  metadmg: "metaDMG-cpp"
+  unicorn: "unicorn"
+  compressbam: "compressbam"
+
+# ----------------------------
+# Stage 1 — fastp
+# ----------------------------
+fastp:
+  qual: 30
+  min_avg_qual: 25
+  min_len: 30
+  dup_accuracy: 5
+
+# ----------------------------
+# Stage 1 — vsearch
+# ----------------------------
+vsearch:
+  min_seqlen: 30
+
+# ----------------------------
+# Stage 1 — sga
+# ----------------------------
+sga:
+  dust_threshold: 1
+  min_len: 30
+
+# ----------------------------
+# Stage 2 — bowtie2 GTDB mapping
+# ----------------------------
+bt2_gtdb:
+  k: 1000
+  D: 15
+  R: 2
+  N: 1
+  L: 22
+  i: "S,1,1.15"
+  np: 1
+  mp: "1,1"
+  rdg: "0,1"
+  rfg: "0,1"
+  score_min: "L,0,-0.1"
+
+# ----------------------------
+# Stage 3 — metaDMG LCA microbial split (used only if lca_assignment: true)
+# ----------------------------
+metadmg_bac:
+  sim_score_low: 0.92
+  sim_score_high: 1.0
+  how_many: 15
+  weight_type: 1
+
+# ----------------------------
+# Stage 4 — bowtie2 eukaryotic mapping
+# ----------------------------
+bt2_euk:
+  k: 1000
+
+# ----------------------------
+# Stage 6 — unicorn alnfilt
+# ----------------------------
+alnfilt:
+  mode: "ALLTOP"
+  minani: 93.00
+  maxani: 100.00
+
+# ----------------------------
+# Stage 6 — unicorn refstats
+# ----------------------------
+refstats:
+  minreads: 3
+
+# ----------------------------
+# Stage 7 — metaDMG LCA (eukaryotic)
+# ----------------------------
+metadmg_euk:
+  sim_score_low: 0.95
+  sim_score_high: 1.0
+  how_many: 15
+  weight_type: 1
+
+# ----------------------------
+# Stage 7 — metaDMG dfit
+# ----------------------------
+metadmg_dfit:
+  nopt: 10
+  nbootstrap: 20
+  seed: 1234
+  lib: "ds"
+
+# ----------------------------
+# Stage 8 — unicorn taxstats
+# ----------------------------
+taxstats:
+  k: 17
+  minreads: 10
+  ranks: ["family", "genus", "species"]

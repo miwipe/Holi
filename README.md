@@ -18,6 +18,9 @@ With a focus on the challenges unique to ancient metagenomics, such as low-quali
 Below you can find both a bash script guide for running the pipeline and a slurm sbash version of the same. For the details and explanations please visit the [wiki](https://github.com/miwipe/Holi/wiki).
 ### Bash scripts
 
+### Snakemake workflow
+A Snakemake port of the main `bin/holi.sh` pipeline is available under [`workflow/`](workflow/README.md), with all paths/parameters centralized in [`config/config.yaml`](config/config.yaml). It runs the same 8 stages but resumes and cleans up intermediate files automatically, which can make troubleshooting easier than the bash version. See [workflow/README.md](workflow/README.md) for setup and usage.
+
 ## Literature to-date
 Ancient metagenomic analysis of eukaryotes, particularly through shotgun sequencing, began gaining traction around 2016, marking a significant shift in how researchers study past ecosystems and evolutionary processes. Unlike microbial and viral ancient DNA studies, which have a longer history, the recovery and analysis of ancient eukaryotic DNA from complex environmental and archaeological samples remain a relatively new and rapidly developing field. This research area is expanding into diverse applications, including the reconstruction of past biodiversity, tracking the evolution of parasites and symbionts, understanding ancient food webs, and shedding light on human-animal-plant interactions over time. With continued advancements in sequencing technology and bioinformatics, ancient eukaryotic metagenomics is poised to reveal deeper insights into past life and environmental changes.
 
