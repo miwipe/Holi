@@ -2,106 +2,352 @@
 # Ancient Metagenomic Publication Data Visualization Pipeline
 # ===============================================================
 # Description:
-# This script processes and visualizes geospatial and temporal 
+# This script processes and visualizes geospatial and temporal
 # trends in ancient metagenomic studies using data from a Google Sheet.
-# It includes:
-#   - Setup and data import
-#   - Spatial reprojecting and site mapping
-#   - Yearly and cumulative publication bar plots
-#   - Analysis of reference databases used
 #
-# Output:
-# Several figures saved in .png or .pdf format for publication or presentation
+# Main outputs:
+#   - Map by molecular method
+#   - Publication counts by year
+#   - Cumulative publication counts by molecular method
+#   - Yearly publication counts by molecular method
+#   - Publications by reference database
+#   - Publications by mapper
+#   - Map colored by SampleType and shaped by TargetGroup
+#
+# Output figures are written to ../../figures/
 # ===============================================================
 
 
-# -----------------------------
-# Load Required Libraries (Install if Missing)
-# -----------------------------
-# These packages are needed for geospatial handling, plotting, 
-# reading from Google Sheets, and data wrangling.
+# ---------------------------------------------------------------
+# 1. Load required libraries
+# ---------------------------------------------------------------
 
 required_packages <- c(
-  "sf", "ggplot2", "ggrepel", "rnaturalearth", "rnaturalearthdata",
-  "readr", "readxl", "tidyverse", "googlesheets4", "dplyr", 
-  "scales", "viridis"
+  "sf",
+  "ggplot2",
+  "ggrepel",
+  "rnaturalearth",
+  "rnaturalearthdata",
+  "readr",
+  "readxl",
+  "tidyverse",
+  "googlesheets4",
+  "scales",
+  "viridis",
+  "RColorBrewer"
 )
 
-# Install any missing packages
 installed_packages <- rownames(installed.packages())
+
 for (pkg in required_packages) {
   if (!(pkg %in% installed_packages)) {
     install.packages(pkg, dependencies = TRUE)
   }
 }
 
-# Load all packages
-lapply(required_packages, library, character.only = TRUE)
+invisible(
+  lapply(required_packages, library, character.only = TRUE)
+)
 
 
-# -----------------------------
-# Authenticate and Read Data
-# -----------------------------
-# Authenticate with Google Sheets and read the dataset ("Table1" sheet)
+# ---------------------------------------------------------------
+# 2. Output directory
+# ---------------------------------------------------------------
+
+dir.create(
+  "../../figures",
+  recursive = TRUE,
+  showWarnings = FALSE
+)
+
+
+# ---------------------------------------------------------------
+# 3. Authenticate and read Google Sheet
+# ---------------------------------------------------------------
+
 gs4_auth()
+
 coordinates <- read_sheet(
-  "https://docs.google.com/spreadsheets/d/13cmBUi4cigUaTKtQeFLFvS0gXT8AeWxWKzHv2UcOBCI/edit?gid=0#gid=0", 
+  "https://docs.google.com/spreadsheets/d/13cmBUi4cigUaTKtQeFLFvS0gXT8AeWxWKzHv2UcOBCI/edit?gid=0#gid=0",
   sheet = "Eukaryotes"
 )
 
 
-# -----------------------------
-# Data Inspection & Cleaning
-# -----------------------------
-# Check column names and distinct TargetGroup values.
-# Filter out NA Latitude values and "Microorganisms | NA" group.
-colnames(coordinates)
-unique(coordinates$TargetGroup)
-coordinates_noNA <- coordinates %>%
-  filter(Latitude != "NA", TargetGroup != "Microorganisms | NA")
+# ---------------------------------------------------------------
+# 4. Basic data cleaning
+# ---------------------------------------------------------------
 
-
-# -----------------------------
-# Geospatial Preparation
-# -----------------------------
-# Load and reproject world map to Robinson projection for better visualization.
-# Convert coordinates to sf object and project to match world map.
-world <- ne_countries(scale = "medium", returnclass = "sf")
-world_proj <- st_transform(world, crs = st_crs("+proj=robin"))
-
-coordinates_sf <- st_as_sf(coordinates_noNA, coords = c("Longitude", "Latitude"), crs = 4326)
-coordinates_proj <- st_transform(coordinates_sf, crs = st_crs("+proj=robin"))
-coordinates_proj <- cbind(coordinates_noNA, st_coordinates(coordinates_proj))
-
-
-# -----------------------------
-# Filter & Plot Spatial Data
-# -----------------------------
-# Filter dataset for valid entries and plot the world map with study sites.
-# Label sites and color by MolecularMethod shape.
-coordinates_proj_SG_TE <- coordinates_proj %>%
-  mutate(Lab = as.factor(unlist(Lab))) %>%
-  filter(
-    year_published != "NA",
-    TargetGroup != "Microorganisms",
-    TargetTaxa != "Microorganisms",
-    TargetTaxa != "Prokaryotes"
+coordinates <- coordinates %>%
+  mutate(
+    across(
+      where(is.character),
+      ~ trimws(.x)
+    )
+  ) %>%
+  mutate(
+    Latitude = na_if(as.character(Latitude), ""),
+    Longitude = na_if(as.character(Longitude), ""),
+    TargetGroup = na_if(as.character(TargetGroup), ""),
+    TargetTaxa = na_if(as.character(TargetTaxa), ""),
+    MolecularMethod = na_if(as.character(MolecularMethod), ""),
+    SampleType = na_if(as.character(SampleType), ""),
+    SiteName = na_if(as.character(SiteName), ""),
+    DOI = na_if(as.character(DOI), ""),
+    mapper = na_if(as.character(mapper), ""),
+    reference_target = na_if(as.character(reference_target), "")
   )
 
-ggplot() +
-  geom_sf(data = world_proj, fill = "lightgrey", color = "black") +
-  geom_point(data = coordinates_proj_SG_TE, 
-             aes(x = X, y = Y, shape = MolecularMethod), 
-             color = "black", size = 3) +
-  geom_text_repel(data = coordinates_proj_SG_TE, 
-                  aes(x = X, y = Y, label = SiteName),
-                  color = "black", size = 3, fontface = "bold", box.padding = 0.3) +
-  coord_sf(crs = st_crs("+proj=robin")) +
-  theme_minimal() +
-  theme(
-    panel.grid.major = element_line(color = "gray", linetype = "dashed"),
-    panel.background = element_rect(fill = "white", color = NA)
+
+# ---------------------------------------------------------------
+# 5. Coordinate cleaning and automatic lat/lon swap detection
+# ---------------------------------------------------------------
+
+coordinates <- coordinates %>%
+  mutate(
+    Latitude_numeric = suppressWarnings(
+      as.numeric(as.character(Latitude))
+    ),
+    Longitude_numeric = suppressWarnings(
+      as.numeric(as.character(Longitude))
+    ),
+    
+    # Obvious reversal: latitude impossible (>90) while longitude fits latitude range
+    coords_swapped =
+      !is.na(Latitude_numeric) &
+      !is.na(Longitude_numeric) &
+      abs(Latitude_numeric) > 90 &
+      abs(Longitude_numeric) <= 90,
+    
+    Latitude_fixed = if_else(
+      coords_swapped,
+      Longitude_numeric,
+      Latitude_numeric
+    ),
+    
+    Longitude_fixed = if_else(
+      coords_swapped,
+      Latitude_numeric,
+      Longitude_numeric
+    )
+  )
+
+# Report automatically swapped coordinates
+swapped_coordinates <- coordinates %>%
+  filter(coords_swapped) %>%
+  select(
+    any_of(c(
+      "Publication",
+      "SiteName",
+      "Latitude",
+      "Longitude",
+      "Latitude_fixed",
+      "Longitude_fixed"
+    ))
+  )
+
+if (nrow(swapped_coordinates) > 0) {
+  message("\nCoordinates automatically swapped because latitude/longitude were reversed:")
+  print(swapped_coordinates, n = Inf)
+}
+
+# Report rows that still cannot be mapped
+bad_coordinates <- coordinates %>%
+  filter(
+    is.na(Latitude_fixed) |
+      is.na(Longitude_fixed) |
+      Latitude_fixed < -90 |
+      Latitude_fixed > 90 |
+      Longitude_fixed < -180 |
+      Longitude_fixed > 180
+  ) %>%
+  select(
+    any_of(c(
+      "Publication",
+      "SiteName",
+      "Latitude",
+      "Longitude"
+    ))
+  )
+
+if (nrow(bad_coordinates) > 0) {
+  message("\nRows excluded from maps because coordinates are missing or invalid:")
+  print(bad_coordinates, n = Inf)
+}
+
+
+# ---------------------------------------------------------------
+# 6. Keep rows with usable geographic coordinates
+# ---------------------------------------------------------------
+
+coordinates_noNA <- coordinates %>%
+  filter(
+    !is.na(Latitude_fixed),
+    !is.na(Longitude_fixed),
+    Latitude_fixed >= -90,
+    Latitude_fixed <= 90,
+    Longitude_fixed >= -180,
+    Longitude_fixed <= 180,
+    is.na(TargetGroup) | TargetGroup != "Microorganisms | NA"
+  ) %>%
+  mutate(
+    Latitude = Latitude_fixed,
+    Longitude = Longitude_fixed
+  )
+
+
+# ---------------------------------------------------------------
+# 7. World map and projection
+# ---------------------------------------------------------------
+
+world <- ne_countries(
+  scale = "medium",
+  returnclass = "sf"
+)
+
+robin_crs <- st_crs("+proj=robin")
+
+world_proj <- st_transform(
+  world,
+  crs = robin_crs
+)
+
+coordinates_sf <- st_as_sf(
+  coordinates_noNA,
+  coords = c("Longitude", "Latitude"),
+  crs = 4326,
+  remove = FALSE
+)
+
+coordinates_proj_sf <- st_transform(
+  coordinates_sf,
+  crs = robin_crs
+)
+
+xy <- st_coordinates(coordinates_proj_sf)
+
+coordinates_proj <- coordinates_noNA %>%
+  mutate(
+    X = xy[, 1],
+    Y = xy[, 2]
+  )
+
+
+# ---------------------------------------------------------------
+# 8. Common filtered eukaryotic plotting dataset
+# ---------------------------------------------------------------
+
+coordinates_proj_SG_TE <- coordinates_proj %>%
+  mutate(
+    Lab = as.factor(Lab),
+    year_published = suppressWarnings(
+      as.integer(as.character(year_published))
+    )
+  ) %>%
+  filter(
+    !is.na(year_published),
+    is.na(TargetGroup) | TargetGroup != "Microorganisms",
+    is.na(TargetTaxa) |
+      !TargetTaxa %in% c(
+        "Microorganisms",
+        "Prokaryotes"
+      )
+  )
+
+
+# ---------------------------------------------------------------
+# 9. Helper function for discrete shapes
+# ---------------------------------------------------------------
+
+make_shape_scale <- function(values) {
+  
+  levels_present <- sort(
+    unique(
+      values[
+        !is.na(values) &
+          values != ""
+      ]
+    )
+  )
+  
+  available_shapes <- c(
+    16, 17, 15, 18,
+    3, 4, 8, 1, 2,
+    0, 5, 6, 7, 9,
+    10, 11, 12, 13, 14,
+    19, 20, 21, 22, 23, 24, 25
+  )
+  
+  shapes <- rep(
+    available_shapes,
+    length.out = length(levels_present)
+  )
+  
+  names(shapes) <- levels_present
+  
+  shapes
+}
+
+
+# ===============================================================
+# FIGURE 1
+# Sites by Molecular Method
+# ===============================================================
+
+map_method_data <- coordinates_proj_SG_TE %>%
+  filter(
+    !is.na(MolecularMethod),
+    MolecularMethod != ""
+  )
+
+method_shapes <- make_shape_scale(
+  map_method_data$MolecularMethod
+)
+
+p_map_method <- ggplot() +
+  
+  geom_sf(
+    data = world_proj,
+    fill = "lightgrey",
+    color = "black",
+    linewidth = 0.25
   ) +
+  
+  geom_point(
+    data = map_method_data,
+    aes(
+      x = X,
+      y = Y,
+      shape = MolecularMethod
+    ),
+    color = "black",
+    size = 3,
+    na.rm = TRUE
+  ) +
+  
+  scale_shape_manual(
+    values = method_shapes,
+    drop = TRUE
+  ) +
+  
+  
+  coord_sf(
+    crs = robin_crs
+  ) +
+  
+  theme_minimal() +
+  
+  theme(
+    panel.grid.major = element_line(
+      color = "gray",
+      linetype = "dashed"
+    ),
+    panel.background = element_rect(
+      fill = "white",
+      color = NA
+    ),
+    legend.position = "right"
+  ) +
+  
   labs(
     title = "Ancient Metagenomic Study Sites",
     x = "Longitude",
@@ -109,74 +355,178 @@ ggplot() +
     shape = "Molecular Method"
   )
 
-ggsave("../../figures/SG_TE_map_method.png", width = 10, height = 7, dpi = 300)
 
-colnames(coordinates)
+ggsave(
+  "../../figures/SG_TE_map_method.png",
+  plot = p_map_method,
+  width = 10,
+  height = 7,
+  dpi = 300
+)
 
-# -----------------------------
-# Yearly Publication Barplot
-# -----------------------------
-# Count publications per year (after filtering) and plot as bar chart.
-coordinates %>%
-  mutate(year_published = suppressWarnings(as.integer(as.character(year_published)))) %>%  # ensure integer years
+
+# ---------------------------------------------------------------
+# 10. Publication-level plotting dataset
+# ---------------------------------------------------------------
+
+publication_data <- coordinates %>%
+  mutate(
+    year_published = suppressWarnings(
+      as.integer(as.character(year_published))
+    )
+  ) %>%
   filter(
     !is.na(year_published),
-    TargetGroup != "Microorganisms",
-    TargetTaxa != "Microorganisms"
+    is.na(TargetGroup) | TargetGroup != "Microorganisms",
+    is.na(TargetTaxa) |
+      !TargetTaxa %in% c(
+        "Microorganisms",
+        "Prokaryotes"
+      )
+  )
+
+
+# ===============================================================
+# FIGURE 2
+# Number of publications per year
+# ===============================================================
+
+publication_year_counts <- publication_data %>%
+  filter(
+    !is.na(DOI),
+    DOI != "",
+    !is.na(year_published)
   ) %>%
-  select(year_published, MolecularMethod, DOI) %>%
-  unique() %>%
-  group_by(year_published, MolecularMethod) %>%
-  count() %>%
-  ungroup() %>%
-  ggplot(aes(x = year_published, y = n)) +
-  geom_bar(stat = "identity") +
-  scale_x_continuous(breaks = function(x) seq(floor(min(x, na.rm = TRUE)), ceiling(max(x, na.rm = TRUE)), by = 1)) +  # whole years only
-  scale_y_continuous(breaks = pretty_breaks(n = 5)) +
+  distinct(
+    year_published,
+    DOI
+  ) %>%
+  count(
+    year_published,
+    name = "n"
+  ) %>%
+  arrange(year_published) %>%
+  mutate(
+    year_published = factor(
+      year_published,
+      levels = sort(unique(year_published))
+    )
+  )
+
+p_publications_year <- ggplot(
+  publication_year_counts,
+  aes(
+    x = year_published,
+    y = n
+  )
+) +
+  geom_col(
+    width = 0.8,
+    na.rm = TRUE
+  ) +
+  scale_y_continuous(
+    breaks = pretty_breaks(n = 5),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
   theme_test() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5)) +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,
+      hjust = 1,
+      vjust = 0.5
+    )
+  ) +
   labs(
     title = "Ancient Metagenome Publication Counts by Year",
     x = "Year Published",
-    y = "Number of Publications",
-    fill = "Molecular Method"
+    y = "Number of Publications"
   )
 
-ggsave("../../figures/barplot_no_publications.png", width = 6, height = 4, dpi = 300)
+
+ggsave(
+  "../../figures/barplot_no_publications.png",
+  plot = p_publications_year,
+  width = 6,
+  height = 4,
+  dpi = 300
+)
 
 
-# -----------------------------
-# Cumulative Publication Trend
-# -----------------------------
-# Compute cumulative counts over time for each method, ensuring missing years are filled with 0.
-coordinates %>%
-  mutate(year_published = suppressWarnings(as.integer(as.character(year_published)))) %>%  # ensure integer years
+# ===============================================================
+# FIGURE 3
+# Cumulative publication trend by Molecular Method
+# ===============================================================
+
+cumulative_data <- publication_data %>%
   filter(
-    !is.na(year_published),
-    TargetGroup != "Microorganisms",
-    TargetTaxa != "Microorganisms"
+    !is.na(DOI),
+    DOI != "",
+    !is.na(MolecularMethod),
+    MolecularMethod != "",
+    !is.na(year_published)
   ) %>%
-  select(year_published, MolecularMethod, DOI) %>%
-  unique() %>%
-  group_by(year_published, MolecularMethod) %>%
-  count(name = "n") %>%
-  ungroup() %>%
+  distinct(
+    year_published,
+    MolecularMethod,
+    DOI
+  ) %>%
+  count(
+    year_published,
+    MolecularMethod,
+    name = "n"
+  ) %>%
   tidyr::complete(
-    year_published = seq(min(year_published, na.rm = TRUE), max(year_published, na.rm = TRUE), by = 1),
+    year_published = seq(
+      min(year_published, na.rm = TRUE),
+      max(year_published, na.rm = TRUE),
+      by = 1
+    ),
     MolecularMethod,
     fill = list(n = 0)
   ) %>%
-  arrange(MolecularMethod, year_published) %>%
+  arrange(
+    MolecularMethod,
+    year_published
+  ) %>%
   group_by(MolecularMethod) %>%
-  mutate(cumulative_n = cumsum(n)) %>%
+  mutate(
+    cumulative_n = cumsum(n)
+  ) %>%
   ungroup() %>%
-  ggplot(aes(x = year_published, y = cumulative_n, fill = MolecularMethod)) +
-  geom_bar(stat = "identity") +
-  scale_x_continuous(breaks = function(x) seq(floor(min(x, na.rm = TRUE)), ceiling(max(x, na.rm = TRUE)), by = 1)) +  # whole years only
-  scale_fill_brewer(palette = "Set2") +
-  scale_y_continuous(breaks = pretty_breaks(n = 5)) +
-  theme_minimal(base_size = 14) +
+  mutate(
+    year_published = factor(
+      year_published,
+      levels = sort(unique(year_published))
+    )
+  )
+
+p_cumulative <- ggplot(
+  cumulative_data,
+  aes(
+    x = year_published,
+    y = cumulative_n,
+    fill = MolecularMethod
+  )
+) +
+  geom_col(
+    width = 0.8,
+    na.rm = TRUE
+  ) +
+  scale_fill_viridis_d(
+    option = "D"
+  ) +
+  scale_y_continuous(
+    breaks = pretty_breaks(n = 5),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
   theme_test() +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,
+      hjust = 1,
+      vjust = 0.5
+    )
+  ) +
   labs(
     title = "Cumulative Publications Over Time by Molecular Method",
     x = "Year Published",
@@ -184,32 +534,74 @@ coordinates %>%
     fill = "Molecular Method"
   )
 
-ggsave("../../figures/barplot_cumsum_no_publications_methods.png", width = 6, height = 4, dpi = 300)
+
+ggsave(
+  "../../figures/barplot_cumsum_no_publications_methods.png",
+  plot = p_cumulative,
+  width = 7,
+  height = 5,
+  dpi = 300
+)
 
 
+# ===============================================================
+# FIGURE 4
+# Yearly publication counts by Molecular Method
+# ===============================================================
 
-# -----------------------------
-# Yearly Stacked Barplot by Method
-# -----------------------------
-# Stacked bars for number of publications each year, broken down by method.
-coordinates %>%
-  mutate(year_published = suppressWarnings(as.integer(as.character(year_published)))) %>%  # ensure integer years
+year_method_counts <- publication_data %>%
   filter(
-    !is.na(year_published),
-    TargetGroup != "Microorganisms",
-    TargetTaxa != "Microorganisms"
+    !is.na(DOI),
+    DOI != "",
+    !is.na(MolecularMethod),
+    MolecularMethod != "",
+    !is.na(year_published)
   ) %>%
-  select(year_published, MolecularMethod, DOI) %>%
-  unique() %>%
-  group_by(year_published, MolecularMethod) %>%
-  count() %>%
-  ungroup() %>%
-  ggplot(aes(x = year_published, y = n, fill = MolecularMethod)) +
-  geom_bar(stat = "identity") +
-  scale_x_continuous(breaks = function(x) seq(floor(min(x, na.rm = TRUE)), ceiling(max(x, na.rm = TRUE)), by = 1)) +  # whole years only
-  scale_y_continuous(breaks = pretty_breaks(n = 5)) +
+  distinct(
+    year_published,
+    MolecularMethod,
+    DOI
+  ) %>%
+  count(
+    year_published,
+    MolecularMethod,
+    name = "n"
+  ) %>%
+  arrange(year_published) %>%
+  mutate(
+    year_published = factor(
+      year_published,
+      levels = sort(unique(year_published))
+    )
+  )
+
+p_year_method <- ggplot(
+  year_method_counts,
+  aes(
+    x = year_published,
+    y = n,
+    fill = MolecularMethod
+  )
+) +
+  geom_col(
+    width = 0.8,
+    na.rm = TRUE
+  ) +
+  scale_fill_viridis_d(
+    option = "D"
+  ) +
+  scale_y_continuous(
+    breaks = pretty_breaks(n = 5),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
   theme_test() +
-  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5)) +
+  theme(
+    axis.text.x = element_text(
+      angle = 90,
+      hjust = 1,
+      vjust = 0.5
+    )
+  ) +
   labs(
     title = "Ancient Metagenome Publication Counts by Year and Molecular Method",
     x = "Year Published",
@@ -217,144 +609,217 @@ coordinates %>%
     fill = "Molecular Method"
   )
 
-ggsave("../../figures/barplot_no_publications_methods.png", width = 8, height = 5, dpi = 300)
+
+ggsave(
+  "../../figures/barplot_no_publications_methods.png",
+  plot = p_year_method,
+  width = 8,
+  height = 5,
+  dpi = 300
+)
 
 
-# -----------------------------
+# ===============================================================
+# FIGURE 5
 # Publications by Reference Database
-# -----------------------------
-# Count number of publications using each reference database and visualize.
-coordinates %>%
+# ===============================================================
+
+reference_data <- publication_data %>%
   filter(
-    year_published != "NA",
-    TargetGroup != "Microorganisms",
-    TargetTaxa != "Microorganisms",
-    TargetTaxa != "Prokaryotes"
+    !is.na(reference_target),
+    reference_target != "",
+    !is.na(DOI),
+    DOI != ""
   ) %>%
-  select(reference_target, DOI) %>%
-  unique() %>%
-  group_by(reference_target) %>%
-  count() %>%
-  ungroup() %>%
-  ggplot(aes(reference_target, n)) +
-  geom_bar(stat = "identity", position = "dodge") +
+  distinct(
+    reference_target,
+    DOI
+  ) %>%
+  count(
+    reference_target,
+    name = "n"
+  ) %>%
+  arrange(desc(n))
+
+p_reference <- ggplot(
+  reference_data,
+  aes(
+    x = reorder(reference_target, n),
+    y = n
+  )
+) +
+  geom_col(
+    na.rm = TRUE
+  ) +
+  coord_flip() +
+  scale_y_continuous(
+    breaks = pretty_breaks(n = 5),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
   theme_test() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
   labs(
     title = "Publications by Reference Databases",
     x = "Reference Target",
     y = "Number of Publications"
   )
 
-ggsave("../../figures/barplot_N_databases.png", width = 8, height = 5, dpi = 300)
 
-# -----------------------------
-# Publications by Mappers
-# -----------------------------
-# Count number of publications using each reference database and visualize.
-coordinates %>%
+ggsave(
+  "../../figures/barplot_N_databases.png",
+  plot = p_reference,
+  width = 8,
+  height = 6,
+  dpi = 300
+)
+
+
+# ===============================================================
+# FIGURE 6
+# Publications by Mapper
+# ===============================================================
+
+mapper_data <- publication_data %>%
   filter(
-    !is.na(year_published),
-    TargetGroup != "Microorganisms",
-    TargetTaxa != "Microorganisms",
-    TargetTaxa != "Prokaryotes"
+    !is.na(mapper),
+    mapper != "",
+    !is.na(DOI),
+    DOI != ""
   ) %>%
-  select(mapper, DOI) %>%
-  unique() %>%
-  group_by(mapper) %>%
-  count() %>%
-  ungroup() %>%
-  filter(!is.na(mapper), !is.na(n)) %>%              # Remove NAs
-  mutate(mapper = as.character(mapper)) %>%          # Ensure mapper is character
-  ggplot(aes(mapper, n)) +
-  geom_bar(stat = "identity", position = "dodge", na.rm = TRUE) +
+  distinct(
+    mapper,
+    DOI
+  ) %>%
+  count(
+    mapper,
+    name = "n"
+  ) %>%
+  arrange(desc(n))
+
+p_mapper <- ggplot(
+  mapper_data,
+  aes(
+    x = reorder(mapper, n),
+    y = n
+  )
+) +
+  geom_col(
+    na.rm = TRUE
+  ) +
+  coord_flip() +
+  scale_y_continuous(
+    breaks = pretty_breaks(n = 5),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
   theme_test() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1)) +
   labs(
     title = "Publications by Mapper",
     x = "Mapper",
     y = "Number of Publications"
   )
 
-ggsave("../../figures/barplot_N_mappers.png", width = 8, height = 5, dpi = 300)
 
-# -----------------------------
-# Color by SampleType and shape by TargetGroup
-# -----------------------------
-# Filter dataset for valid entries and plot the world map with study sites.
-# Label sites and color by MolecularMethod shape.
-# Load libraries
-library(ggplot2)
-library(ggrepel)
-library(RColorBrewer)
-library(dplyr)
+ggsave(
+  "../../figures/barplot_N_mappers.png",
+  plot = p_mapper,
+  width = 8,
+  height = 6,
+  dpi = 300
+)
 
-# Prepare data
-coordinates_proj_SG_TE <- coordinates_proj %>%
-  mutate(Lab = as.factor(unlist(Lab))) %>%
+
+# ===============================================================
+# FIGURE 7
+# Map colored by Sample Type and shaped by Target Group
+# ===============================================================
+
+map_target_data <- coordinates_proj_SG_TE %>%
   filter(
-    year_published != "NA",
-    TargetGroup != "Microorganisms",
-    TargetTaxa != "Microorganisms",
-    TargetTaxa != "Prokaryotes"
+    !is.na(SampleType),
+    SampleType != "",
+    !is.na(TargetGroup),
+    TargetGroup != ""
   )
 
-# Refined Okabe–Ito style palette (13 distinct, colorblind-safe tones)
-okabe_ito_mod <- c(
-  "#E69F00", # orange-yellow
-  "#56B4E9", # sky blue
-  "#009E73", # bluish green
-  "#8A2BE2", # violet (replaces lemon yellow)
-  "#0072B2", # blue
-  "#D55E00", # vermilion
-  "#CC79A7", # reddish purple
-  "#999999", # grey
-  "#A52A2A", # brown
-  "#00CED1", # turquoise
-  "#FFD700", # golden yellow
-  "#228B22", # forest green
-  "#DA70D6", # orchid pink
-  "#006D6F", # deep teal
-  "#6A5ACD", # slate blue
-  "#C44E52",  # muted crimson
-  "#556B2F"  # dark olive green
+message("\nSampleType categories used in final map:")
+print(
+  map_target_data %>%
+    count(
+      SampleType,
+      sort = TRUE
+    ),
+  n = Inf
 )
-# Main plot
-ggplot() +
-  # World map background
-  geom_sf(data = world_proj, fill = "lightgrey", color = "black") +
+
+message("\nTargetGroup categories used in final map:")
+print(
+  map_target_data %>%
+    count(
+      TargetGroup,
+      sort = TRUE
+    ),
+  n = Inf
+)
+
+target_shapes <- make_shape_scale(
+  map_target_data$TargetGroup
+)
+
+p_map_target <- ggplot() +
   
-  # Sample points
+  geom_sf(
+    data = world_proj,
+    fill = "lightgrey",
+    color = "black",
+    linewidth = 0.25
+  ) +
+  
   geom_point(
-    data = coordinates_proj_SG_TE,
-    aes(x = X, y = Y, shape = TargetGroup, color = SampleType),
-    size = 3
+    data = map_target_data,
+    aes(
+      x = X,
+      y = Y,
+      shape = TargetGroup,
+      color = SampleType
+    ),
+    size = 3,
+    na.rm = TRUE
   ) +
   
-  # Site labels
-#  geom_text_repel(
-#    data = coordinates_proj_SG_TE,
-#    aes(x = X, y = Y, label = SiteName),
-#    color = "black", size = 3, fontface = "bold", box.padding = 0.3
-#  ) +
+  scale_shape_manual(
+    values = target_shapes,
+    drop = TRUE
+  ) +
   
-  # Apply refined color palette
-  scale_color_manual(values = okabe_ito_mod) +
+  # Dynamic discrete palette: works with any number of SampleType categories
+  scale_color_viridis_d(
+    option = "D"
+  ) +
   
-  # Coordinate system
-  coord_sf(crs = st_crs("+proj=robin")) +
+  coord_sf(
+    crs = robin_crs
+  ) +
   
-  # Clean minimal theme
   theme_minimal() +
+  
   theme(
-    panel.grid.major = element_line(color = "gray", linetype = "dashed"),
-    panel.background = element_rect(fill = "white", color = NA),
+    panel.grid.major = element_line(
+      color = "gray",
+      linetype = "dashed"
+    ),
+    panel.background = element_rect(
+      fill = "white",
+      color = NA
+    ),
     legend.position = "right",
-    legend.title = element_text(size = 10, face = "bold"),
-    legend.text = element_text(size = 9)
+    legend.title = element_text(
+      size = 10,
+      face = "bold"
+    ),
+    legend.text = element_text(
+      size = 9
+    )
   ) +
   
-  # Labels and titles
   labs(
     title = "Ancient Metagenomic Study Sites",
     subtitle = "Global distribution of sampling locations by Sample Type and Studied Organism",
@@ -364,12 +829,43 @@ ggplot() +
     color = "Sample Type"
   )
 
-ggsave("../../figures/SG_TE_map_SampleType_Target.png", width = 10, height = 7, dpi = 300)
 
-colnames(coordinates)
+ggsave(
+  "../../figures/SG_TE_map_SampleType_Target.png",
+  plot = p_map_target,
+  width = 10,
+  height = 7,
+  dpi = 300
+)
 
 
+# ===============================================================
+# FINAL SUMMARY
+# ===============================================================
+
+message("\n---------------------------------------")
+message("Finished generating figures.")
+message("Rows read from Google Sheet: ", nrow(coordinates))
+message("Rows with valid map coordinates: ", nrow(coordinates_noNA))
+message(
+  "Unique publications: ",
+  n_distinct(
+    coordinates$DOI[
+      !is.na(coordinates$DOI) &
+        coordinates$DOI != ""
+    ]
+  )
+)
+message(
+  "Unique mapped sites: ",
+  n_distinct(
+    coordinates_noNA$SiteName[
+      !is.na(coordinates_noNA$SiteName) &
+        coordinates_noNA$SiteName != ""
+    ]
+  )
+)
+message("---------------------------------------\n")
 
 
 #### END OF SCRIPT
-
