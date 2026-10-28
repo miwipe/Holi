@@ -2,3 +2,13 @@
 .Rhistory
 .RData
 .Ruserdata
+.DS_Store
+.RDataTmp
+*.local.yml
+*.local.config
+*.local.list
+dist/
+outputs/
+processed_data_ss/
+nameNode.sqlite*
+__pycache__/

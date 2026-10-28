@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+message: "If you use Holi, please cite the software release."
+title: "Holi: A Holistic Pipeline for Ancient Metagenomics"
+type: software
+version: 1.0.0
+doi: 10.5281/zenodo.18328110
+url: https://github.com/miwipe/Holi
+authors:
+  - family-names: Pedersen
+    given-names: M. W.
+  - family-names: Vogel
+    given-names: N. A.
+  - family-names: Holman
+    given-names: L. E.
+  - family-names: Wang
+    given-names: Yi
+license: GPL-3.0-only

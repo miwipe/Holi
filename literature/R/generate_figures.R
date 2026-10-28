@@ -14,7 +14,7 @@
 #   - Publications by mapper
 #   - Map colored by SampleType and shaped by TargetGroup
 #
-# Output figures are written to ../../figures/
+# Output figures are written to the repository figures/ directory
 # ===============================================================
 
 
@@ -54,11 +54,17 @@ invisible(
 # 2. Output directory
 # ---------------------------------------------------------------
 
-dir.create(
-  "../../figures",
-  recursive = TRUE,
-  showWarnings = FALSE
-)
+# Resolve the repository from either Rscript, source(), or the R project directory.
+script_file <- tryCatch(sys.frame(1)$ofile, error = function(e) NULL)
+file_arg <- grep("^--file=", commandArgs(trailingOnly = FALSE), value = TRUE)
+if (length(file_arg)) script_file <- sub("^--file=", "", file_arg[[1]])
+candidates <- c(getwd(), file.path(getwd(), ".."), file.path(getwd(), "../.."))
+if (!is.null(script_file)) candidates <- c(file.path(dirname(normalizePath(script_file)), "../.."), candidates)
+repo_candidates <- candidates[file.exists(file.path(candidates, "bin", "holi.sh"))]
+if (!length(repo_candidates)) stop("Cannot find Holi root; run from the repository or literature/R.")
+figure_dir <- file.path(normalizePath(repo_candidates[[1]]), "figures")
+dir.create(figure_dir, recursive = TRUE, showWarnings = FALSE)
+
 
 
 # ---------------------------------------------------------------
@@ -357,7 +363,7 @@ p_map_method <- ggplot() +
 
 
 ggsave(
-  "../../figures/SG_TE_map_method.png",
+  file.path(figure_dir, "SG_TE_map_method.png"),
   plot = p_map_method,
   width = 10,
   height = 7,
@@ -444,7 +450,7 @@ p_publications_year <- ggplot(
 
 
 ggsave(
-  "../../figures/barplot_no_publications.png",
+  file.path(figure_dir, "barplot_no_publications.png"),
   plot = p_publications_year,
   width = 6,
   height = 4,
@@ -536,7 +542,7 @@ p_cumulative <- ggplot(
 
 
 ggsave(
-  "../../figures/barplot_cumsum_no_publications_methods.png",
+  file.path(figure_dir, "barplot_cumsum_no_publications_methods.png"),
   plot = p_cumulative,
   width = 7,
   height = 5,
@@ -611,7 +617,7 @@ p_year_method <- ggplot(
 
 
 ggsave(
-  "../../figures/barplot_no_publications_methods.png",
+  file.path(figure_dir, "barplot_no_publications_methods.png"),
   plot = p_year_method,
   width = 8,
   height = 5,
@@ -665,7 +671,7 @@ p_reference <- ggplot(
 
 
 ggsave(
-  "../../figures/barplot_N_databases.png",
+  file.path(figure_dir, "barplot_N_databases.png"),
   plot = p_reference,
   width = 8,
   height = 6,
@@ -719,7 +725,7 @@ p_mapper <- ggplot(
 
 
 ggsave(
-  "../../figures/barplot_N_mappers.png",
+  file.path(figure_dir, "barplot_N_mappers.png"),
   plot = p_mapper,
   width = 8,
   height = 6,
@@ -831,7 +837,7 @@ p_map_target <- ggplot() +
 
 
 ggsave(
-  "../../figures/SG_TE_map_SampleType_Target.png",
+  file.path(figure_dir, "SG_TE_map_SampleType_Target.png"),
   plot = p_map_target,
   width = 10,
   height = 7,
