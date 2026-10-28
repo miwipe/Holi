@@ -1,5 +1,7 @@
 # Running Holi
 
+Holi supports the existing Bash runner described below and an [experimental Nextflow alternative](../../nextflow/README.md). Both cover the eight main stages. Nextflow uses explicit CSV/JSON manifests and `-resume`; its execution tests do not yet establish scientific equivalence on real data.
+
 Run commands below from the repository root. `bin/holi.sh` is the current entry point; names such as `holi_prefilter.sh` and `test_tools_safe.sh` in the historical wiki do not identify files in this checkout.
 
 ## Prepare the input and configuration

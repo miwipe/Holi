@@ -7,6 +7,7 @@ Start with the workflow that matches your task. The command examples refer to fi
 | Installation and dependencies | [Getting started](wiki/Getting-started.md) |
 | Analysis stages and outputs | [Pipeline workflow](wiki/Pipeline-workflow.md) |
 | Inputs, configuration, and execution | [Running Holi](wiki/Running-Holi.md) |
+| Alternative Nextflow runner and validation limits | [Nextflow](../nextflow/README.md) and [branch review](NEXTFLOW_REVIEW.md) |
 | Constructing reference sets | [Reference catalogue](wiki/Reference-catalogue.md) |
 | Trimming, merging, and filtering | [Preprocessing](wiki/Preprocessing.md) |
 | Microbial assignment and read splitting | [Microbial prefiltering](wiki/Microbial-prefiltering.md) |

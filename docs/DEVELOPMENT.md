@@ -1,12 +1,13 @@
 # Development
 
-The `holi_dev` branch reorganises documentation and the literature explorer while retaining existing analysis entry points and scientific figure files. Changes to database layouts or biological filtering criteria should be reviewed separately from presentation changes.
+The `holi_dev` branch reorganises documentation and the literature explorer while retaining existing analysis entry points and scientific figure files. It also includes an experimental Nextflow alternative; see [runner documentation and validation](../nextflow/README.md). Changes to database layouts or biological filtering criteria should be reviewed separately from presentation changes.
 
 ## Folder conventions
 
 | Folder | Contents |
 | --- | --- |
 | `bin/` | Existing analysis and postprocessing scripts; keep entry points stable |
+| `nextflow/` | Alternative eight-stage runner, manifests, and execution tests |
 | `envs/` | Conda environments; `bin/*.yml` links preserve older commands |
 | `config/` | Portable examples; `*.local.*` files are ignored |
 | `literature/R/` | Literature plotting project and exploratory `sandbox.R` |

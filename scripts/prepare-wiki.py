@@ -20,6 +20,7 @@ for page in source.glob('*.md'):
     # first, then the simple local wiki page links.
     text = re.sub(r'\]\((\.\./wiki-archive/.*?\.md)\)', lambda m: '](' + 'https://github.com/miwipe/Holi/blob/holi_dev/docs/wiki-archive/' + quote(m[1].split('/')[-1]) + ')', text)
     text = text.replace('](../DEVELOPMENT.md)', '](https://github.com/miwipe/Holi/blob/holi_dev/docs/DEVELOPMENT.md)')
+    text = text.replace('](../../nextflow/README.md)', '](https://github.com/miwipe/Holi/blob/holi_dev/nextflow/README.md)')
     text = re.sub(r'\]\(([A-Za-z0-9_-]+)\.md(#[^)]*)?\)', lambda m: '](' + m[1] + (m[2] or '') + ')', text)
     (destination / page.name).write_text(text)
 print(f'Prepared {len(list(source.glob("*.md")))} wiki pages in {destination}; nothing published.')

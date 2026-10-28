@@ -5,7 +5,7 @@ import re
 from urllib.parse import unquote, urlsplit
 
 root = Path(__file__).resolve().parents[1]
-pages = [root/'README.md', root/'docs/README.md', root/'docs/DEVELOPMENT.md']
+pages = [root/'README.md', root/'docs/README.md', root/'docs/DEVELOPMENT.md', root/'nextflow/README.md', root/'docs/NEXTFLOW_REVIEW.md']
 pages += list((root/'docs/wiki').glob('*.md'))
 pages += [root/'config/README.md', root/'literature/README.md', root/'data/literature/README.md', root/'dashboard/vendor/README.md']
 errors = []

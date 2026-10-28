@@ -1,0 +1,38 @@
+{
+  "microbial_assignment": "getrtax",
+  "microbial_indexes": [
+    "microbial/index.1.fas.gz"
+  ],
+  "eukaryotic_indexes": [
+    "eukaryotic/nuclear.1.fas.gz",
+    "eukaryotic/mitochondrion.fas.gz",
+    "eukaryotic/plastid.fas.gz",
+    "eukaryotic/core_nt.fas.gz",
+    "eukaryotic/phylo_norway.1-of-10"
+  ],
+  "taxonomy": {
+    "microbial_taxid_map": "taxonomy/microbial/taxid.map",
+    "microbial_names": "taxonomy/microbial/names.dmp",
+    "microbial_nodes": "taxonomy/microbial/nodes.dmp",
+    "microbial_acc2tax": "taxonomy/microbial/accession2taxid.gz",
+    "names": "taxonomy/ncbi/names.dmp",
+    "nodes": "taxonomy/ncbi/nodes.dmp",
+    "acc2tax": [
+      "taxonomy/ncbi/nucl.acc2taxid.gz",
+      "taxonomy/phylo_norway/nucl.acc2taxid.gz"
+    ]
+  },
+  "tools": {
+    "fastp": "fastp",
+    "vsearch": "vsearch",
+    "sga": "sga",
+    "bowtie2": "bowtie2",
+    "samtools": "samtools",
+    "seqtk": "seqtk",
+    "getRTax": "getRTax",
+    "unicorn": "unicorn",
+    "metadmg": "metaDMG-cpp",
+    "compressbam": "compressbam"
+  },
+  "parameters": {}
+}

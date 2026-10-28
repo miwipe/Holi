@@ -12,3 +12,11 @@ outputs/
 processed_data_ss/
 nameNode.sqlite*
 __pycache__/
+
+# Nextflow run state and local manifests
+.nextflow/
+.nextflow.log*
+work/
+results/
+*.local.json
+*.local.csv

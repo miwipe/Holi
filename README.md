@@ -10,7 +10,7 @@ This repository also maintains a literature compilation and interactive explorer
 
 **[Explore the literature](https://miwipe.github.io/Holi/)** · **[Read the documentation](docs/README.md)** · **[Open the source spreadsheet](https://docs.google.com/spreadsheets/d/13cmBUi4cigUaTKtQeFLFvS0gXT8AeWxWKzHv2UcOBCI/edit#gid=0)** · **[GitHub wiki](https://github.com/miwipe/Holi/wiki)**
 
-> `holi_dev` is the documentation and dashboard development branch. The public explorer and GitHub wiki may still show the released version. The proposed wiki pages are versioned in [docs/wiki](docs/wiki/Home.md).
+> `holi_dev` contains documentation, dashboard development, and an experimental Nextflow runner. The public explorer and GitHub wiki may still show the released version. The proposed wiki pages are versioned in [docs/wiki](docs/wiki/Home.md).
 
 ## Start here
 
@@ -39,6 +39,8 @@ This repository also maintains a literature compilation and interactive explorer
 Taxonomic assignment alone does not establish that a sequence is ancient. Interpret fragment lengths, damage estimates, coverage, controls, and archaeological or environmental context together. Reads retained after microbial filtering are not a measure of eukaryotic mapping success.
 
 ## Run Holi
+
+Holi has two execution options: the existing Bash script below, and an [experimental Nextflow runner](nextflow/README.md) covering the same eight stages with explicit manifests and task caching. Both are kept together in this branch. Nextflow execution tests pass, but scientific equivalence on real data has not yet been established.
 
 The supplied analysis environment targets Linux. Reference databases, taxonomies, and the executables required by the selected stages must be available before a full run. The reference layout in the current script is specific to the existing indexed catalogues; inspect it before substituting a different database build.
 
@@ -109,6 +111,7 @@ The script reads the live `Eukaryotes` tab using `googlesheets4`, may prompt for
 
 ```text
 bin/                         Analysis and postprocessing entry points
+nextflow/                    Alternative DSL2 runner, stage commands, execution tests
 envs/                        Conda environment definitions
 config/                      Portable example configs and sample list
 docs/wiki/                   Proposed, maintained GitHub wiki pages
