@@ -36,7 +36,7 @@ usage() {
     echo "  --skip-comp-merge                 Skip compress+sort+merge that produces *.comp.bam (assumes it already exists)."
     echo "  --skip-bam-filtering              Skip Unicorn filtering step (alnfilt → refstats → bamstats)."
     echo "  --skip-metadmg                    Skip metaDMG lca/dfit/aggregate steps."
-    echo "  --skip-unicorn-tidstats           Skip final unicorn tidstats step."
+    echo "  --skip-unicorn-tidstats           Skip final multi-rank Unicorn taxstats step."
     echo
     echo "Mode options:"
     echo "  --single-end            Treat input as single-end FASTQ (no R2, no merging)."
@@ -311,7 +311,24 @@ check_gz() {
     [[ "$tail_bytes" -ge 8 ]] || return 1
     return 0
 }
-check_file() { [[ -s "$1" ]]; }
+check_table() {
+    [[ -s "$1" ]] || { [[ -s "$1.gz" ]] && gzip -t -- "$1.gz" 2>/dev/null; }
+}
+
+check_taxstats() {
+    local prefix=$1 rank
+    for rank in family genus species; do
+        check_table "$prefix.$rank.tsv" &&
+            check_table "$prefix.$rank.readlengths.tsv" || return 1
+    done
+}
+
+check_legacy_taxstats() {
+    local prefix=$1 rank
+    for rank in family genus species; do
+        check_table "$prefix.$rank.taxstats" || return 1
+    done
+}
 
 # Returns 0 (complete) or 1 (incomplete/missing/corrupt) for a given stage
 stage_complete() {
@@ -328,7 +345,8 @@ stage_complete() {
             5) check_bam "$EUK_OUT/${sample}.comp.bam"                              || ok=false ;;
             6) check_bam "$EUK_OUT/${sample}.comp.filtered.bam"                     || ok=false ;;
             7) check_gz  "$EUK_OUT/${sample}.sort.comp.filtered.agg.stat.gz"        || ok=false ;;
-            8) check_file "$EUK_OUT/${sample}.comp.filtered.species.taxstats"       || ok=false ;;
+            8) { check_taxstats "$EUK_OUT/${sample}.comp.filtered" ||
+                 check_legacy_taxstats "$EUK_OUT/${sample}.comp.filtered"; } || ok=false ;;
         esac
 
         if [ "$ok" = false ]; then
@@ -1138,22 +1156,56 @@ fi
 
 if [ "$SKIP_UNICORN_TIDSTATS" = false ]; then
 
-    for rank in family genus species; do
-        log_step "Running unicorn taxstats at rank: ${rank}..."
-        cat "$SAMPLE_LIST" | parallel -j "$THREADSP" \
-          "/projects/caeg/apps/unicorn_300326/unicorn/unicorn taxstats \
-             -b $EUK_OUT/{}.alnfilt.bam \
-             -t $THREADS \
-             -o $EUK_OUT/{}.comp.filtered.${rank}.taxstats.bam \
-             --names $TAX_PATH_NCBI/taxdump/names.dmp \
-             --nodes $TAX_PATH_NCBI/taxdump/nodes.dmp \
-             --acc2tax <(zcat $TAX_PATH_NCBI/*.acc2taxid.gz /datasets/caeg_dataset/references/phylo_norway/20250127/*.acc2taxid.gz) \
-             -k $TAXSTATS_k --outstat $EUK_OUT/{}.comp.filtered.${rank}.taxstats \
-             --minreads $TAXSTATS_MINREADS --rank ${rank} \
-             > $LOGS/{}__unicorn_taxstats_${rank}.log 2>&1"
-        check_success "Unicorn taxstats (${rank})"
-    done
+    log_step "Running Unicorn taxstats for family, genus and species..."
+    (
+        taxstats_tmp=$(mktemp -d "$TMP/holi-taxstats.XXXXXX") || exit 1
+        trap 'rm -rf -- "$taxstats_tmp"' EXIT
+        acc2tax=${TAXSTATS_ACC2TAX:-}
+        if [[ -z "$acc2tax" ]]; then
+            shopt -s nullglob
+            maps=("$TAX_PATH_NCBI"/*.acc2taxid.gz)
+            if (( ${#maps[@]} == 0 )); then
+                log_error "No .acc2taxid.gz files found in $TAX_PATH_NCBI."
+                exit 1
+            fi
+            maps+=(/datasets/caeg_dataset/references/phylo_norway/20250127/*.acc2taxid.gz)
+            shopt -u nullglob
+            acc2tax="$taxstats_tmp/accessions.tsv.gz"
+            cat -- "${maps[@]}" > "$acc2tax" || exit 1
+        fi
+        if [[ ! -r "$acc2tax" || ! -s "$acc2tax" ]]; then
+            log_error "Cannot read accession map: $acc2tax"
+            exit 1
+        fi
 
+        run_taxstats() (
+            local sample=$1 prefix output
+            output_dir=$(mktemp -d "$EUK_OUT/.taxstats.XXXXXX") || exit 1
+            trap 'rm -rf -- "$output_dir"' EXIT
+            prefix="$output_dir/${sample}.comp.filtered"
+            {
+                samtools sort -@ "$THREADS" -T "$output_dir/sort" \
+                    -o "$output_dir/input.coord.bam" "$EUK_OUT/${sample}.alnfilt.bam" || exit 1
+                unicorn taxstats -b "$output_dir/input.coord.bam" \
+                    --acc2tax "$acc2tax" --names "$TAX_PATH_NCBI/taxdump/names.dmp" \
+                    --nodes "$TAX_PATH_NCBI/taxdump/nodes.dmp" \
+                    --threads "$THREADS" -k "$TAXSTATS_k" --minreads "$TAXSTATS_MINREADS" \
+                    --ranks family,genus,species --outstat "$prefix.tsv" || exit 1
+                if ! check_taxstats "$prefix"; then
+                    echo "Incomplete Unicorn taxstats or read-length tables for $sample." >&2
+                    exit 1
+                fi
+                for output in "$prefix".*; do
+                    mv -f -- "$output" "$EUK_OUT/" || exit 1
+                done
+            } > "$LOGS/${sample}__unicorn_taxstats.log" 2>&1
+        )
+
+        export -f run_taxstats check_taxstats check_table
+        export acc2tax EUK_OUT LOGS TAX_PATH_NCBI THREADS TAXSTATS_k TAXSTATS_MINREADS
+        SHELL="$BASH" parallel -j "$THREADSP" run_taxstats {} :::: "$SAMPLE_LIST"
+    )
+    check_success "Unicorn taxstats"
 else
   log_step "Skipping Stage 8 (unicorn taxstats) as requested."
 fi

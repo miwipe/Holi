@@ -130,7 +130,7 @@ lib_ids <- sample_list[[1]]
 log_msg(paste("Loaded sample list with", length(lib_ids), "library IDs"))
 
 #####################################################
-# IO helpers (unchanged)
+# IO helpers
 #####################################################
 read_with_id <- function(file) {
   if (!file.exists(file) || file.info(file)$size == 0) {
@@ -138,7 +138,7 @@ read_with_id <- function(file) {
     return(NULL)
   }
   lib_id <- tools::file_path_sans_ext(basename(file)) %>% sub("\\..*$", "", .)
-  fread(file, colClasses = "character") |>
+  fread(file = file, colClasses = "character") |>
     as.data.frame() |>
     mutate(library_id = lib_id)
 }
@@ -149,8 +149,16 @@ read_or_process <- function(output_file, path = NULL, pattern = NULL) {
     return(fread(output_file, sep = "\t", data.table = FALSE))
   } else {
     if (is.null(path) || is.null(pattern)) stop("Need path and pattern to process raw files")
-    files <- list.files(path = path, pattern = pattern, full.names = TRUE, recursive = TRUE)
+    files <- list.files(
+      path = path, pattern = paste0(pattern, "(\\.gz)?$"),
+      full.names = TRUE, recursive = TRUE
+    )
+    info <- file.info(files)
+    files <- files[!is.na(info$size) & !info$isdir & info$size > 0]
     if (length(files) == 0) stop(paste("No files found for pattern:", pattern))
+    # Count a table once when both its gzip and plain-text copies are present.
+    files <- files[order(endsWith(files, ".gz"), decreasing = TRUE)]
+    files <- files[!duplicated(sub("\\.gz$", "", files))]
     df <- map_dfr(files, read_with_id)
     fwrite(df, output_file, sep = "\t", quote = FALSE)
     log_msg(paste("Processed and saved:", output_file))
@@ -172,7 +180,7 @@ if (is.null(metaDMG_species) || is.null(metaDMG_genus)) {
   lca_all_df <- read_or_process(
     file.path(OUTPUT_DIR, "lca_all.tsv"),
     EUK_DIR,
-    ".sort\\.comp\\.filtered\\.agg\\.stat\\.gz$"
+    "\\.sort\\.comp\\.filtered\\.agg\\.stat"
   )
   log_msg(paste("LCA rows:", nrow(lca_all_df)))
   
@@ -229,12 +237,12 @@ if (is.null(stats_species)) {
   stats_all_df <- read_or_process(
     file.path(OUTPUT_DIR, "stats_all.tsv"),
     EUK_DIR,
-    ".comp\\.filtered\\.unicorn\\.refstats$"
+    "\\.comp\\.filtered\\.unicorn\\.refstats"
   )
   acc2tax_all_df <- read_or_process(
     file.path(OUTPUT_DIR, "acc2tax_all.tsv"),
     EUK_DIR,
-    ".acc2tax$"
+    "\\.acc2tax"
   )
 
   log_msg(paste("Stats rows:", nrow(stats_all_df)))

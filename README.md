@@ -18,6 +18,10 @@ With a focus on the challenges unique to ancient metagenomics, such as low-quali
 Below you can find both a bash script guide for running the pipeline and a slurm sbash version of the same. For the details and explanations please visit the [wiki](https://github.com/miwipe/Holi/wiki).
 ### Bash scripts
 
+For production Butteracid post-processing on a cluster, see [Running Butteracid on Slurm](docs/Butteracid-Slurm.md).
+
+Stage 8 of `holi.sh` runs Unicorn `taxstats --ranks family,genus,species` once per sample. Put a build with multi-rank support on `PATH`. Holi writes `<sample>.comp.filtered.<rank>.tsv.gz` and `<sample>.comp.filtered.<rank>.readlengths.tsv.gz` for each rank. Resume checks accept gzip and plain-text copies, including complete sets of legacy `.taxstats` tables. Set `TAXSTATS_ACC2TAX` to use an existing accession map, either plain TSV or gzip. [Unicorn multi-rank taxstats documentation](https://github.com/GeoGenetics/unicorn/tree/dev2#taxstats)
+
 ## Literature to-date
 Ancient metagenomic analysis of eukaryotes, particularly through shotgun sequencing, began gaining traction around 2016, marking a significant shift in how researchers study past ecosystems and evolutionary processes. Unlike microbial and viral ancient DNA studies, which have a longer history, the recovery and analysis of ancient eukaryotic DNA from complex environmental and archaeological samples remain a relatively new and rapidly developing field. This research area is expanding into diverse applications, including the reconstruction of past biodiversity, tracking the evolution of parasites and symbionts, understanding ancient food webs, and shedding light on human-animal-plant interactions over time. With continued advancements in sequencing technology and bioinformatics, ancient eukaryotic metagenomics is poised to reveal deeper insights into past life and environmental changes.
 

@@ -1,0 +1,183 @@
+#!/usr/bin/env bash
+# =============================================================================
+# Butteracid configuration
+# Read by butteracid_production_v3.sh, submit_butteracid_slurm.sh, every Slurm
+# job, and the R scripts.
+#
+# FOR A NEW PROJECT, CHANGE THE LINES MARKED  # <-- CHANGE
+# (everything else can normally stay as it is).
+#
+# IMPORTANT: the R scripts read this file as plain text and do NOT expand
+# ${VARIABLES}. Keys marked [R] must therefore be written out as full absolute
+# paths. Keys without [R] are only used by Bash and may use ${WORKDIR} etc.
+# =============================================================================
+
+# ---------------------------
+# Optional Conda activation for the launcher and every Slurm job
+# ---------------------------
+BUTTERACID_CONDA_BASE=""   # <-- CHANGE: set to your Conda root to activate the butteracid environment
+export BUTTERACID_CONDA_BASE
+
+activate_butteracid_environment() {
+  local restore_nounset=0 activation_status=0
+  if [[ ! -r "$BUTTERACID_CONDA_BASE/etc/profile.d/conda.sh" ]]; then
+    echo "[ERROR] Cannot read $BUTTERACID_CONDA_BASE/etc/profile.d/conda.sh" >&2
+    return 1
+  fi
+  if [[ $- == *u* ]]; then restore_nounset=1; set +u; fi
+  if source "$BUTTERACID_CONDA_BASE/etc/profile.d/conda.sh" && conda activate butteracid; then
+    activation_status=0
+  else
+    activation_status=$?
+    echo "[ERROR] Could not activate the butteracid conda environment." >&2
+  fi
+  if (( restore_nounset == 1 )); then set -u; fi
+  return "$activation_status"
+}
+if [[ -n "$BUTTERACID_CONDA_BASE" ]] && ! activate_butteracid_environment; then
+  return 1 2>/dev/null || exit 1
+fi
+unset -f activate_butteracid_environment
+
+# ---------------------------
+# Project paths
+# ---------------------------
+# <-- CHANGE [R] prefix for all output files
+OUT_PREFIX="butteracid"
+# <-- CHANGE [R] project folder, no trailing slash
+WORKDIR="/path/to/project/butteracid"
+# <-- CHANGE [R] one library ID per line
+LIB_LIST="/path/to/project/butteracid/sample.list.lib"
+# <-- CHANGE [R] per-library results
+EUK_DIR="/path/to/project/butteracid/res"
+# <-- CHANGE [R]
+LOG_FILE="/path/to/project/butteracid/pipeline.log"
+SAMPLE_LIST="${WORKDIR}/sample.path"
+LOG_DIR="${WORKDIR}/logs"
+MISSING_DATA_LOG="${WORKDIR}/missing_data.log"
+FAILED_JOBS_LOG="${WORKDIR}/failed_jobs.log"
+
+# Scratch space for BAM sorting (needs lots of free space; one subfolder per job)
+SORT_TMPDIR="/path/to/shared/scratch/butteracid"   # <-- CHANGE: your own scratch tmp folder
+
+# Accession -> taxid -> database mapping (rerun R script)
+# <-- CHANGE [R] if stored elsewhere
+ACC2TAX_DBID_FILE="/path/to/project/butteracid/all_acc2tax.with_dbid.gz"
+
+# ---------------------------
+# Reference data (shared CAEG paths; only change for a new database release)
+# ---------------------------
+PROD_PATH="/datasets/caeg_production/libraries/"
+DB_PATH="/datasets/caeg_dataset/references/ncbi/20250530/data/wgs_eukaryota"
+DB_PATH_clean="/datasets/caeg_dataset/references/ncbi/20250530/data/"
+# [R]
+TAX_PATH_NCBI="/datasets/caeg_dataset/references/ncbi/20250530/taxonomy/ncbi/"
+EXTRA_ACC2TAX_GZ="/datasets/caeg_dataset/references/phylo_norway/phylo_norway.acc2taxid.gz"
+
+# ---------------------------
+# R script (absolute path; postprocessing_functions.R must sit next to it)
+# ---------------------------
+RSCRIPT_RERUN="/path/to/project/butteracid/butteracid_rerun.R"   # <-- CHANGE if scripts live elsewhere
+
+# ---------------------------
+# Threading
+# ---------------------------
+THREADS="10"    # CPUs per samtools/unicorn job
+THREADSP="5"    # GNU parallel concurrency, only inside the preparation/QC job
+
+# ---------------------------
+# Step 1: path-list reuse
+# ---------------------------
+REBUILD_SAMPLE_LIST="0"   # 1 = same as --rebuild-paths
+ONLY_STEP5="0"            # 1 = same as --only-step5
+
+# ---------------------------
+# Step 2b: multi-flowcell merge (Bash only, derived from WORKDIR/OUT_PREFIX)
+# ---------------------------
+MERGED_BAM_DIR="${WORKDIR}/merged_bams"
+FLOWCELL_SUMMARY="${WORKDIR}/${OUT_PREFIX}_flowcell_summary.tsv"
+MULTI_FC_LIST="${WORKDIR}/${OUT_PREFIX}_multi_flowcell_libs.tsv"
+MERGE_PLAN="${WORKDIR}/${OUT_PREFIX}_merge_plan.tsv"
+LIBRARY_BAM_LIST="${WORKDIR}/${OUT_PREFIX}_library_bams.tsv"
+MERGED_QC_STATS_OUTPUT="${WORKDIR}/${OUT_PREFIX}_qc_merged_stats.tsv"
+MERGE_SORT_MEM="1G"     # samtools sort memory per thread
+ONEBAM_SORT_MEM="10G"   # onebam bamsort -m
+
+# ---------------------------
+# Step 3: QC outputs
+# (the R scripts replace ${WORKDIR} and ${OUT_PREFIX} in these two QC keys only)
+# ---------------------------
+QC_DISREGARDED_SUMMARY="${WORKDIR}/${OUT_PREFIX}_disregarded_reads_counts.tsv"
+QC_OUTPUT="${WORKDIR}/${OUT_PREFIX}_qc_metadata.filtered.tsv"
+# <-- CHANGE [R] Use full literal paths for these two outputs.
+QC_STATS_OUTPUT="/path/to/project/butteracid/butteracid_QC_stats.tsv"
+LIB_QC_STATS_OUTPUT="/path/to/project/butteracid/butteracid_qc_library_stats.tsv"
+
+# ---------------------------
+# Executables
+# ---------------------------
+UNICORN_BIN="/projects/caeg/apps/unicorn_300326/unicorn/unicorn"
+METADMG_BIN="/projects/caeg/apps/metaDMG_300326/metaDMG-cpp/metaDMG-cpp"
+ONEBAM_BIN="/projects/caeg/apps/onebam/onebam"
+
+# ---------------------------
+# Step 5a: unicorn alnfilt
+# ---------------------------
+ALNFILT_MODE="ALLTOP"     # RNDTOP | ALLTOP | PCTTOP | ALL
+ALNFILT_MINANI="93.00"    # percent, not a fraction
+ALNFILT_MAXANI="100.00"
+
+# ---------------------------
+# Step 5a: metaDMG lca
+# ---------------------------
+METADMG_SIM_SCORE_LOW="0.93"
+METADMG_SIM_SCORE_HIGH="1.0"
+METADMG_HOW_MANY="15"
+METADMG_WEIGHT_TYPE="1"
+METADMG_LCA_RANK="family"
+METADMG_FIX_NCBI="0"
+METADMG_THREADS="10"      # CPUs for the lca and dfit jobs
+
+# ---------------------------
+# Step 5a: metaDMG dfit
+# ---------------------------
+METADMG_SHOWFITS="2"
+METADMG_NOPT="10"
+METADMG_NBOOTSTRAP="20"
+METADMG_DOBOOT="1"        # not used by the pipeline
+METADMG_SEED="1234"
+METADMG_LIB="ds"          # <-- CHANGE: ds | ss (library type)
+
+# ---------------------------
+# Slurm queue settings (empty = cluster defaults)
+# ---------------------------
+SLURM_ACCOUNT=""
+SLURM_PARTITION=""
+SLURM_QOS=""
+SLURM_RESERVATION=""
+SLURM_ENV_SETUP=""        # optional extra script sourced in every job
+
+SLURM_MAX_CONCURRENT="100"   # max running tasks PER stage array, not in total
+
+# Preparation/QC (one job, Steps 1-3 with GNU parallel inside)
+SLURM_PREP_CPUS="50"         # keep at THREADS * THREADSP
+SLURM_PREP_MEM="64G"
+SLURM_PREP_TIME="2-00:00:00"
+
+# Default for every per-library stage (override with SLURM_<STAGE>_MEM / _TIME,
+# stages: PRECHECK ALNFILT REFSTATS NSORT LCA DFIT AGGREGATE XRSORT FAMILY GENUS SPECIES)
+SLURM_SAMPLE_MEM="32G"
+SLURM_SAMPLE_TIME="3-00:00:00"
+
+# unicorn stages load the full reference/taxonomy
+SLURM_ALNFILT_MEM="400G"
+SLURM_REFSTATS_MEM="400G"
+SLURM_FAMILY_MEM="400G"
+SLURM_GENUS_MEM="400G"
+SLURM_SPECIES_MEM="400G"
+
+# Final R post-processing (writes the Parquet output itself)
+SLURM_FINAL_CPUS="10"
+SLURM_FINAL_MEM="64G"
+SLURM_FINAL_TIME="1-00:00:00"
+RUN_PARQUET_EXPORT="0"       # 1 = also run the old butteracid_parquet_export.R afterwards
