@@ -18,6 +18,8 @@ With a focus on the challenges unique to ancient metagenomics, such as low-quali
 Below you can find both a bash script guide for running the pipeline and a slurm sbash version of the same. For the details and explanations please visit the [wiki](https://github.com/miwipe/Holi/wiki).
 ### Bash scripts
 
+To submit Holi and run public Butteracid QC and TSV merging on its outputs, use [`submit_holi_butteracid_slurm.sh`](bin/submit_holi_butteracid_slurm.sh).
+
 For production Butteracid post-processing on a cluster, see [Running Butteracid on Slurm](docs/Butteracid-Slurm.md).
 
 Stage 8 of `holi.sh` runs Unicorn `taxstats --ranks family,genus,species` once per sample. Put a build with multi-rank support on `PATH`. Holi writes `<sample>.comp.filtered.<rank>.tsv.gz` and `<sample>.comp.filtered.<rank>.readlengths.tsv.gz` for each rank. Resume checks accept gzip and plain-text copies, including complete sets of legacy `.taxstats` tables. Set `TAXSTATS_ACC2TAX` to use an existing accession map, either plain TSV or gzip. [Unicorn multi-rank taxstats documentation](https://github.com/GeoGenetics/unicorn/tree/dev2#taxstats)

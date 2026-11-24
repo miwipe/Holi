@@ -125,8 +125,12 @@ if (!file.exists(sqlite_file)) {
 #####################################################
 sample_list_file <- SAMPLE_LIST
 if (!file.exists(sample_list_file)) stop(paste("Sample list not found at", sample_list_file))
-sample_list <- read.table(sample_list_file, header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+sample_list <- read.table(
+  sample_list_file, header = FALSE, sep = "\t", colClasses = "character",
+  quote = "", comment.char = ""
+)
 lib_ids <- sample_list[[1]]
+if (length(lib_ids) && lib_ids[[1]] == "library_id") lib_ids <- lib_ids[-1]
 log_msg(paste("Loaded sample list with", length(lib_ids), "library IDs"))
 
 #####################################################
@@ -137,7 +141,10 @@ read_with_id <- function(file) {
     message(paste("Skipping missing or empty file:", file))
     return(NULL)
   }
-  lib_id <- tools::file_path_sans_ext(basename(file)) %>% sub("\\..*$", "", .)
+  lib_id <- sub(
+    "(\\.sort\\.comp\\.filtered\\.agg\\.stat|\\.comp\\.filtered\\.unicorn\\.refstats|\\.acc2tax)(\\.gz)?$",
+    "", basename(file)
+  )
   fread(file = file, colClasses = "character") |>
     as.data.frame() |>
     mutate(library_id = lib_id)
@@ -190,7 +197,7 @@ if (is.null(metaDMG_species) || is.null(metaDMG_genus)) {
     samples = unique(lca_all_df$library_id),
     ci      = "asymptotic",
     nperm   = 100,
-    nproc   = 14
+    nproc   = min(14L, parallelly::availableCores())
   )
   log_msg("CCC statistics joined onto lca_all_df.")
   

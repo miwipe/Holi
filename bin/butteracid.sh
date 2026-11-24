@@ -41,7 +41,9 @@ source "$CONFIG_FILE"
 
 SCRATCH_DIR="${SCRATCH_DIR:-/tmp}"
 
-module load samtools
+if ! command -v samtools >/dev/null; then
+    module load samtools
+fi
 TAB=$'\t'
 
 # ---------------------------
@@ -211,7 +213,7 @@ process_library() {
         STAT_G=$(samtools view "$MAPPED_READS_UNIQ" \
                  | cut -f1 \
                  | sort -u --temporary-directory="$SCRATCH_DIR" \
-                 | wc -l)
+                 | awk 'END { print NR }')
     fi
 
     local MAPPED_READS_UNIQ_P="$PREFILTER_BAM_BASE/${LIB_ID}.comp.bam"
@@ -220,7 +222,7 @@ process_library() {
         STAT_H=$(samtools view "$MAPPED_READS_UNIQ_P" \
                  | cut -f1 \
                  | sort -u --temporary-directory="$SCRATCH_DIR" \
-                 | wc -l)
+                 | awk 'END { print NR }')
     fi
 
     # fastp fields (9)
@@ -234,10 +236,10 @@ process_library() {
 
     # FASTQ files
     local FASTQS=(
-        $FASTQ_LANE_BASE/${LIB_ID}_L001_R1_001.fastq.gz
-        $FASTQ_LANE_BASE/${LIB_ID}_L002_R1_001.fastq.gz
-        $FASTQ_LANE_BASE/${LIB_ID}_L003_R1_001.fastq.gz
-        $FASTQ_LANE_BASE/${LIB_ID}_L004_R1_001.fastq.gz
+        "$FASTQ_LANE_BASE/${LIB_ID}_L001_R1_001.fastq.gz"
+        "$FASTQ_LANE_BASE/${LIB_ID}_L002_R1_001.fastq.gz"
+        "$FASTQ_LANE_BASE/${LIB_ID}_L003_R1_001.fastq.gz"
+        "$FASTQ_LANE_BASE/${LIB_ID}_L004_R1_001.fastq.gz"
         "$FASTQ_LOW_COMPLEXITY_BASE/${LIB_ID}.ppm.vs.d4.fq.gz"
         "$FASTQ_PREFILTER_BASE/${LIB_ID}.euk.fastq.gz"
     )
@@ -284,10 +286,10 @@ else
 	microb_in_num_seqs microb_in_sum_len microb_in_min_len microb_in_avg_len microb_in_max_len microb_in_Q1 microb_in_Q2 microb_in_Q3 microb_in_sum_gap microb_in_N50 microb_in_N50_num microb_in_Q20(%) microb_in_Q30(%) microb_in_AvgQual microb_in_GC(%) microb_in_sum_n \
 	prefiltered_num_seqs prefiltered_sum_len prefiltered_min_len prefiltered_avg_len prefiltered_max_len prefiltered_Q1 prefiltered_Q2 prefiltered_Q3 prefiltered_sum_gap prefiltered_N50 prefiltered_N50_num prefiltered_Q20(%) prefiltered_Q30(%) prefiltered_AvgQual prefiltered_GC(%) prefiltered_sum_n"
 
-	echo "$HEADER" | tr ' ' '\t' > "$QC_OUTPUT"
-    
+    printf '%s\n' "$HEADER" | awk '{$1 = $1; print}' OFS='\t' > "$QC_OUTPUT"
 
-    parallel -j 10 process_library :::: "$LIBRARY_LIST" >> "$QC_OUTPUT"
+    awk '{sub(/\r$/, "")} NR == 1 && $0 == "library_id" {next} NF' "$LIBRARY_LIST" | \
+        SHELL="$BASH" parallel -j "${BUTTERACID_QC_JOBS:-10}" process_library >> "$QC_OUTPUT"
     echo "[INFO] QC table with mapped reads + fastp + full seqkit stats written to: $QC_OUTPUT"
 fi
 
